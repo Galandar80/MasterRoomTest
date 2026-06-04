@@ -385,7 +385,8 @@ create policy "players update own character notes fields" on public.player_chara
 drop policy if exists "room members read scenes" on public.scenes;
 drop policy if exists "masters manage scenes" on public.scenes;
 create policy "room members read scenes" on public.scenes for select to authenticated using (
-  public.is_room_master(room_id)
+  public.is_superadmin()
+  or public.is_room_master(room_id)
   or (
     public.is_room_player(room_id)
     and (
@@ -395,8 +396,8 @@ create policy "room members read scenes" on public.scenes for select to authenti
   )
 );
 create policy "masters manage scenes" on public.scenes for all to authenticated
-  using (public.is_room_master(room_id))
-  with check (public.is_room_master(room_id));
+  using (public.is_room_master(room_id) or public.is_superadmin())
+  with check (public.is_room_master(room_id) or public.is_superadmin());
 
 drop policy if exists "room members read npcs" on public.npcs;
 drop policy if exists "masters manage npcs" on public.npcs;
@@ -410,20 +411,20 @@ create policy "masters manage npcs" on public.npcs for all to authenticated
 drop policy if exists "room members read audio" on public.audio_tracks;
 drop policy if exists "masters manage audio" on public.audio_tracks;
 create policy "room members read audio" on public.audio_tracks for select to authenticated using (
-  public.is_room_master(room_id) or public.is_room_player(room_id)
+  public.is_room_master(room_id) or public.is_room_player(room_id) or public.is_superadmin()
 );
 create policy "masters manage audio" on public.audio_tracks for all to authenticated
-  using (public.is_room_master(room_id))
-  with check (public.is_room_master(room_id));
+  using (public.is_room_master(room_id) or public.is_superadmin())
+  with check (public.is_room_master(room_id) or public.is_superadmin());
 
 drop policy if exists "room members read sound effects" on public.sound_effects;
 drop policy if exists "masters manage sound effects" on public.sound_effects;
 create policy "room members read sound effects" on public.sound_effects for select to authenticated using (
-  public.is_room_master(room_id) or public.is_room_player(room_id)
+  public.is_room_master(room_id) or public.is_room_player(room_id) or public.is_superadmin()
 );
 create policy "masters manage sound effects" on public.sound_effects for all to authenticated
-  using (public.is_room_master(room_id))
-  with check (public.is_room_master(room_id));
+  using (public.is_room_master(room_id) or public.is_superadmin())
+  with check (public.is_room_master(room_id) or public.is_superadmin());
 
 drop policy if exists "read public messages and own private messages" on public.messages;
 drop policy if exists "members create messages" on public.messages;
@@ -448,11 +449,11 @@ create policy "senders update own messages and masters pin" on public.messages f
 drop policy if exists "room members read media assets" on public.media_assets;
 drop policy if exists "masters manage media assets" on public.media_assets;
 create policy "room members read media assets" on public.media_assets for select to authenticated using (
-  public.is_room_master(room_id) or public.is_room_player(room_id)
+  public.is_room_master(room_id) or public.is_room_player(room_id) or public.is_superadmin()
 );
 create policy "masters manage media assets" on public.media_assets for all to authenticated
-  using (public.is_room_master(room_id))
-  with check (public.is_room_master(room_id));
+  using (public.is_room_master(room_id) or public.is_superadmin())
+  with check (public.is_room_master(room_id) or public.is_superadmin());
 
 drop policy if exists "room members read presence" on public.room_presence;
 drop policy if exists "members upsert own presence" on public.room_presence;

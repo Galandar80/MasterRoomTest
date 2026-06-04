@@ -2,7 +2,7 @@
 
 import { Activity, ArrowLeft, AudioLines, Bell, Eye, Film, ImageUp, Library, MessageSquareText, Plus, Radio, Save, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, X } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { AudioTrack, InventoryItem, MediaAsset, Message, Npc, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
 import { AudioPlayer } from "@/components/room/audio-player";
 import { ChatPanel } from "@/components/room/chat-panel";
@@ -113,6 +113,7 @@ export function MasterControlRoom({
   const [masterChatText, setMasterChatText] = useState("");
   const [offText, setOffText] = useState("");
   const [isSoundbarOpen, setIsSoundbarOpen] = useState(false);
+  const sessionMediaAssets = useMemo(() => buildSessionMediaAssets(state), [state]);
   const sendMasterChat = () => {
     if (!masterChatText.trim()) return;
     onPublicMessage(masterChatText.trim());
@@ -283,7 +284,7 @@ export function MasterControlRoom({
           ) : null}
 
           {activeTool === "media" ? (
-            <MediaLibraryPanel assets={state.mediaAssets} onCreate={onCreateMediaAsset} onDelete={onDeleteMediaAsset} />
+            <MediaLibraryPanel assets={sessionMediaAssets} onCreate={onCreateMediaAsset} onDelete={onDeleteMediaAsset} />
           ) : null}
 
           {activeTool === "inventory" ? (
@@ -607,6 +608,76 @@ function CharactersPanel({ state, expanded = false }: { state: RoomState; expand
 function isOnline(state: RoomState, userId: string) {
   const presence = state.presence.find((entry) => entry.user_id === userId);
   return Boolean(presence && Date.now() - new Date(presence.last_seen_at).getTime() < 45000);
+}
+
+function buildSessionMediaAssets(state: RoomState): MediaAsset[] {
+  const derivedAssets: MediaAsset[] = [];
+
+  for (const scene of state.scenes) {
+    if (scene.image_url) {
+      derivedAssets.push({
+        id: `scene:${scene.id}:image`,
+        room_id: scene.room_id,
+        title: `${scene.title} - immagine scena`,
+        asset_type: "image",
+        url: scene.image_url,
+        tags: ["scena", scene.visibility === "private" ? "privata" : "pubblica"],
+        created_by: scene.created_by,
+        created_at: scene.created_at
+      });
+    }
+
+    if (scene.video_url) {
+      derivedAssets.push({
+        id: `scene:${scene.id}:video`,
+        room_id: scene.room_id,
+        title: `${scene.title} - video scena`,
+        asset_type: "video",
+        url: scene.video_url,
+        tags: ["video", "scena", scene.loop_video === false ? "no-loop" : "loop"],
+        created_by: scene.created_by,
+        created_at: scene.created_at
+      });
+    }
+  }
+
+  for (const track of state.audioTracks) {
+    if (!track.audio_url) continue;
+    derivedAssets.push({
+      id: `audio:${track.id}`,
+      room_id: track.room_id,
+      title: track.title,
+      asset_type: "audio",
+      url: track.audio_url,
+      tags: ["traccia", track.loop ? "loop" : "no-loop"],
+      created_by: null,
+      created_at: ""
+    });
+  }
+
+  for (const effect of state.soundEffects) {
+    if (!effect.audio_url) continue;
+    derivedAssets.push({
+      id: `sound:${effect.id}`,
+      room_id: effect.room_id,
+      title: effect.title,
+      asset_type: "sound",
+      url: effect.audio_url,
+      tags: ["soundbar", effect.loop ? "loop" : "one-shot"],
+      created_by: null,
+      created_at: effect.created_at ?? ""
+    });
+  }
+
+  const seen = new Set<string>();
+  return [...derivedAssets, ...state.mediaAssets]
+    .filter((asset) => {
+      const key = `${asset.asset_type}:${asset.url}`;
+      if (!asset.url || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
 }
 
 function SceneManager({

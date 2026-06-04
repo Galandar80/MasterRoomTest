@@ -10,12 +10,14 @@ export type CreateGameValues = {
   genre: string;
   description: string;
   coverImageUrl: string;
+  coverImageFile?: File;
   roomName: string;
   inviteCode: string;
   maxPlayers: number;
   sceneTitle: string;
   sceneDescription: string;
   sceneImageUrl: string;
+  sceneImageFile?: File;
 };
 
 type CreateGameFormProps = {
@@ -38,7 +40,7 @@ export function CreateGameForm({ state, onBack, onCreate }: CreateGameFormProps)
     sceneImageUrl: state.scene.image_url
   });
 
-  function update(field: keyof CreateGameValues, value: string | number) {
+  function update(field: keyof CreateGameValues, value: string | number | File | undefined) {
     setValues((current) => ({ ...current, [field]: value }));
   }
 
@@ -82,6 +84,13 @@ export function CreateGameForm({ state, onBack, onCreate }: CreateGameFormProps)
           </div>
           <Field label="Descrizione" value={values.description} onChange={(value) => update("description", value)} textarea />
           <Field label="URL copertina" value={values.coverImageUrl} onChange={(value) => update("coverImageUrl", value)} />
+          <FileField
+            label="Carica copertina dal PC"
+            hint="Consigliato 16:9 o verticale soft, JPG/PNG/WebP."
+            accept="image/*"
+            file={values.coverImageFile}
+            onChange={(file) => update("coverImageFile", file)}
+          />
         </FormSection>
 
         <FormSection icon={<Copy size={17} />} title="Stanza">
@@ -107,6 +116,13 @@ export function CreateGameForm({ state, onBack, onCreate }: CreateGameFormProps)
             <Field label="Titolo scena" value={values.sceneTitle} onChange={(value) => update("sceneTitle", value)} />
             <Field label="URL immagine scena" value={values.sceneImageUrl} onChange={(value) => update("sceneImageUrl", value)} />
           </div>
+          <FileField
+            label="Carica immagine scena dal PC"
+            hint="Formato standard 16:9, ideale 1920x1080."
+            accept="image/*"
+            file={values.sceneImageFile}
+            onChange={(file) => update("sceneImageFile", file)}
+          />
           <Field label="Descrizione scena" value={values.sceneDescription} onChange={(value) => update("sceneDescription", value)} textarea />
         </FormSection>
 
@@ -115,6 +131,30 @@ export function CreateGameForm({ state, onBack, onCreate }: CreateGameFormProps)
         </button>
       </form>
     </section>
+  );
+}
+
+function FileField({
+  label,
+  hint,
+  accept,
+  file,
+  onChange
+}: {
+  label: string;
+  hint: string;
+  accept: string;
+  file?: File;
+  onChange: (file?: File) => void;
+}) {
+  return (
+    <label className="grid gap-2 text-sm text-slate-200">
+      {label}
+      <span className="rounded-lg border border-dashed border-brass/30 bg-brass/5 px-3 py-3 text-center text-xs text-brass">
+        {file ? file.name : hint}
+        <input className="sr-only" type="file" accept={accept} onChange={(event) => onChange(event.target.files?.[0])} />
+      </span>
+    </label>
   );
 }
 

@@ -31,12 +31,14 @@ import {
   deleteScene,
   deleteRoom,
   deleteRoomBySuperAdmin,
+  deleteMediaBySuperAdmin,
   deleteSoundEffect,
   enterMasterRoomByCode,
   ensureProfile,
   insertMessage,
   joinRoomByCode,
   listAllRoomsForSuperAdmin,
+  listAllMediaForSuperAdmin,
   exportRoomMessages,
   loadInitialRoomState,
   loadOlderRoomMessages,
@@ -56,7 +58,7 @@ import {
   updateRoomBySuperAdmin,
   uploadPublicFile
 } from "@/lib/supabase/room-service";
-import type { AdminRoomOverview } from "@/lib/supabase/room-service";
+import type { AdminMediaOverview, AdminRoomOverview } from "@/lib/supabase/room-service";
 import type { AudioTrack, DiceRequest, InventoryItem, MediaAsset, Message, Npc, Room, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
 
 type View = "menu" | "create" | "join" | "character" | "player" | "master" | "superadmin";
@@ -71,6 +73,7 @@ export function AppShell() {
   const [pendingPlayerRoom, setPendingPlayerRoom] = useState<RoomState | null>(null);
   const [actionLog, setActionLog] = useState<{ id: string; label: string; detail?: string; created_at: string }[]>([]);
   const [adminRooms, setAdminRooms] = useState<AdminRoomOverview[]>([]);
+  const [adminMedia, setAdminMedia] = useState<AdminMediaOverview[]>([]);
   const supabase = createClient();
   const currentAudio = useMemo(
     () => roomState.audioTracks.find((track) => track.id === roomState.room.current_audio_id) ?? roomState.audioTracks[0],
@@ -268,7 +271,18 @@ export function AppShell() {
     if (supabase && !demoMode) {
       try {
         setError("");
-        const nextState = await createGameInSupabase(supabase, roomState.profile, { ...values, inviteCode });
+        let coverImageUrl = values.coverImageUrl;
+        let sceneImageUrl = values.sceneImageUrl;
+
+        if (values.coverImageFile) {
+          coverImageUrl = await uploadPublicFile(supabase, "scene-images", values.coverImageFile, `campaign-covers/${roomState.profile.id}`);
+        }
+
+        if (values.sceneImageFile) {
+          sceneImageUrl = await uploadPublicFile(supabase, "scene-images", values.sceneImageFile, `initial-scenes/${roomState.profile.id}`);
+        }
+
+        const nextState = await createGameInSupabase(supabase, roomState.profile, { ...values, inviteCode, coverImageUrl, sceneImageUrl });
         setRoomState(nextState);
         setStatus("Partita creata su Supabase");
         setView("master");
@@ -285,6 +299,9 @@ export function AppShell() {
       title: values.sceneTitle,
       description: values.sceneDescription,
       image_url: values.sceneImageUrl || roomState.scene.image_url,
+      media_type: "image",
+      video_url: null,
+      loop_video: true,
       created_at: new Date().toISOString()
     };
 
@@ -323,7 +340,9 @@ export function AppShell() {
     try {
       setError("");
       const rooms = await listAllRoomsForSuperAdmin(supabase, roomState.profile);
+      const media = await listAllMediaForSuperAdmin(supabase, roomState.profile);
       setAdminRooms(rooms);
+      setAdminMedia(media);
       setView("superadmin");
     } catch (adminError) {
       setError(readError(adminError));
@@ -335,7 +354,9 @@ export function AppShell() {
 
     try {
       setError("");
-      setAdminRooms(await listAllRoomsForSuperAdmin(supabase, roomState.profile));
+      const [rooms, media] = await Promise.all([listAllRoomsForSuperAdmin(supabase, roomState.profile), listAllMediaForSuperAdmin(supabase, roomState.profile)]);
+      setAdminRooms(rooms);
+      setAdminMedia(media);
     } catch (adminError) {
       setError(readError(adminError));
     }
@@ -364,6 +385,21 @@ export function AppShell() {
       await deleteRoomBySuperAdmin(supabase, roomState.profile, room.id);
       await refreshAdminRooms();
       setStatus("Stanza eliminata dal superadmin");
+    } catch (adminError) {
+      setError(readError(adminError));
+    }
+  }
+
+  async function deleteAdminMedia(media: AdminMediaOverview) {
+    if (!isSuperAdmin || !supabase || demoMode) return;
+    const confirmed = window.confirm(`Vuoi eliminare definitivamente "${media.title}"?`);
+    if (!confirmed) return;
+
+    try {
+      setError("");
+      await deleteMediaBySuperAdmin(supabase, roomState.profile, media);
+      await refreshAdminRooms();
+      setStatus("Contenuto multimediale eliminato dal superadmin");
     } catch (adminError) {
       setError(readError(adminError));
     }
@@ -588,6 +624,16 @@ export function AppShell() {
           imageUrl = videoUrl;
         }
         const scene = await createScene(supabase, roomState.room.id, { ...roomState.profile, role: "master" }, { ...values, imageUrl, videoUrl });
+        const sceneAssetUrl = scene.media_type === "video" ? scene.video_url || scene.image_url : scene.image_url;
+        if (sceneAssetUrl) {
+          const asset = await createMediaAsset(supabase, roomState.room.id, roomState.profile, {
+            title: scene.title,
+            assetType: scene.media_type === "video" ? "video" : "image",
+            url: sceneAssetUrl,
+            tags: ["scena"]
+          });
+          setRoomState((state) => ({ ...state, mediaAssets: [asset, ...state.mediaAssets.filter((item) => item.id !== asset.id)] }));
+        }
         await updateCurrentScene(supabase, roomState.room.id, scene.id);
         setRoomState((state) => ({
           ...state,
@@ -651,6 +697,15 @@ export function AppShell() {
           audioUrl = await uploadPublicFile(supabase, "audio-tracks", values.audioFile, `rooms/${roomState.room.id}/audio`);
         }
         const track = await createAudioTrack(supabase, roomState.room.id, { ...values, audioUrl });
+        if (audioUrl) {
+          const asset = await createMediaAsset(supabase, roomState.room.id, roomState.profile, {
+            title: track.title,
+            assetType: "audio",
+            url: audioUrl,
+            tags: ["audio", "traccia"]
+          });
+          setRoomState((state) => ({ ...state, mediaAssets: [asset, ...state.mediaAssets.filter((item) => item.id !== asset.id)] }));
+        }
         await updateCurrentAudio(supabase, roomState.room.id, track.id);
         setRoomState((state) => ({
           ...state,
@@ -711,6 +766,15 @@ export function AppShell() {
           audioUrl = await uploadPublicFile(supabase, "audio-tracks", values.audioFile, `rooms/${roomState.room.id}/soundbar`);
         }
         const effect = await createSoundEffect(supabase, roomState.room.id, { ...values, audioUrl });
+        if (audioUrl) {
+          const asset = await createMediaAsset(supabase, roomState.room.id, roomState.profile, {
+            title: effect.title,
+            assetType: "sound",
+            url: audioUrl,
+            tags: ["soundbar", "rumore"]
+          });
+          setRoomState((state) => ({ ...state, mediaAssets: [asset, ...state.mediaAssets.filter((item) => item.id !== asset.id)] }));
+        }
         setRoomState((state) => ({
           ...state,
           soundEffects: [...state.soundEffects.filter((item) => item.id !== effect.id), effect].sort((a, b) => a.title.localeCompare(b.title))
@@ -1191,6 +1255,29 @@ export function AppShell() {
 
     try {
       setError("");
+      const [syntheticSource, syntheticId] = asset.id.split(":");
+      if (syntheticSource === "scene") {
+        const scene = roomState.scenes.find((item) => item.id === syntheticId);
+        if (scene) {
+          await removeMasterScene(scene);
+          return;
+        }
+      }
+      if (syntheticSource === "audio") {
+        const track = roomState.audioTracks.find((item) => item.id === syntheticId);
+        if (track) {
+          await removeMasterAudio(track);
+          return;
+        }
+      }
+      if (syntheticSource === "sound") {
+        const effect = roomState.soundEffects.find((item) => item.id === syntheticId);
+        if (effect) {
+          await removeMasterSoundEffect(effect);
+          return;
+        }
+      }
+
       if (supabase && !demoMode) {
         await deleteMediaAsset(supabase, asset);
       }
@@ -1276,10 +1363,12 @@ export function AppShell() {
       {view === "superadmin" && isSuperAdmin ? (
         <SuperAdminRooms
           rooms={adminRooms}
+          media={adminMedia}
           onBack={() => setView("menu")}
           onRefresh={refreshAdminRooms}
           onUpdate={updateAdminRoom}
           onDelete={deleteAdminRoom}
+          onDeleteMedia={deleteAdminMedia}
         />
       ) : null}
 

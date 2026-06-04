@@ -34,6 +34,18 @@ export type AdminRoomOverview = {
   player_count?: number;
 };
 
+export type AdminMediaOverview = {
+  id: string;
+  source: "scene" | "audio" | "sound" | "media_asset";
+  room_id: string;
+  room_name?: string;
+  campaign_title?: string;
+  title: string;
+  asset_type: "image" | "video" | "audio" | "sound" | "portrait" | "object";
+  url: string;
+  created_at?: string;
+};
+
 type RoomMessagePage = {
   messages: Message[];
   privateMessages: Message[];
@@ -167,6 +179,128 @@ export async function deleteRoomBySuperAdmin(supabase: DatabaseClient, profile: 
   if (error) throw error;
 }
 
+export async function listAllMediaForSuperAdmin(supabase: DatabaseClient, profile: Profile): Promise<AdminMediaOverview[]> {
+  if (!isSuperAdmin(profile)) {
+    throw new Error("Accesso superadmin non autorizzato.");
+  }
+
+  const [{ data: scenes, error: scenesError }, { data: audioTracks, error: audioError }, { data: soundEffects, error: soundError }, { data: mediaAssets, error: mediaError }] =
+    await Promise.all([
+      supabase.from("scenes").select("*, rooms(name,campaigns(title))").order("created_at", { ascending: false }),
+      supabase.from("audio_tracks").select("*, rooms(name,campaigns(title))").neq("audio_url", "").order("created_at", { ascending: false }),
+      supabase.from("sound_effects").select("*, rooms(name,campaigns(title))").neq("audio_url", "").order("created_at", { ascending: false }),
+      supabase.from("media_assets").select("*, rooms(name,campaigns(title))").order("created_at", { ascending: false })
+    ]);
+
+  if (scenesError) throw scenesError;
+  if (audioError) throw audioError;
+  if (soundError) throw soundError;
+  if (mediaError) throw mediaError;
+
+  const sceneMedia = ((scenes ?? []) as any[]).flatMap((scene) => {
+    const roomName = scene.rooms?.name;
+    const campaignTitle = scene.rooms?.campaigns?.title;
+    const entries: AdminMediaOverview[] = [];
+    if (scene.image_url) {
+      entries.push({
+        id: `${scene.id}:image`,
+        source: "scene",
+        room_id: scene.room_id,
+        room_name: roomName,
+        campaign_title: campaignTitle,
+        title: `${scene.title} - immagine`,
+        asset_type: "image",
+        url: scene.image_url,
+        created_at: scene.created_at
+      });
+    }
+    if (scene.video_url) {
+      entries.push({
+        id: `${scene.id}:video`,
+        source: "scene",
+        room_id: scene.room_id,
+        room_name: roomName,
+        campaign_title: campaignTitle,
+        title: `${scene.title} - video`,
+        asset_type: "video",
+        url: scene.video_url,
+        created_at: scene.created_at
+      });
+    }
+    return entries;
+  });
+
+  const audioMedia = ((audioTracks ?? []) as any[]).map((track) => ({
+    id: track.id,
+    source: "audio" as const,
+    room_id: track.room_id,
+    room_name: track.rooms?.name,
+    campaign_title: track.rooms?.campaigns?.title,
+    title: track.title,
+    asset_type: "audio" as const,
+    url: track.audio_url,
+    created_at: track.created_at
+  }));
+
+  const soundMedia = ((soundEffects ?? []) as any[]).map((effect) => ({
+    id: effect.id,
+    source: "sound" as const,
+    room_id: effect.room_id,
+    room_name: effect.rooms?.name,
+    campaign_title: effect.rooms?.campaigns?.title,
+    title: effect.title,
+    asset_type: "sound" as const,
+    url: effect.audio_url,
+    created_at: effect.created_at
+  }));
+
+  const assetMedia = ((mediaAssets ?? []) as any[]).map((asset) => ({
+    id: asset.id,
+    source: "media_asset" as const,
+    room_id: asset.room_id,
+    room_name: asset.rooms?.name,
+    campaign_title: asset.rooms?.campaigns?.title,
+    title: asset.title,
+    asset_type: asset.asset_type,
+    url: asset.url,
+    created_at: asset.created_at
+  }));
+
+  return [...sceneMedia, ...audioMedia, ...soundMedia, ...assetMedia].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+}
+
+export async function deleteMediaBySuperAdmin(supabase: DatabaseClient, profile: Profile, media: AdminMediaOverview) {
+  if (!isSuperAdmin(profile)) {
+    throw new Error("Accesso superadmin non autorizzato.");
+  }
+
+  if (media.source === "scene") {
+    const sceneId = media.id.split(":")[0];
+    const { data: scene, error } = await supabase.from("scenes").select("*").eq("id", sceneId).single();
+    if (error) throw error;
+    await deleteScene(supabase, scene as Scene);
+    return;
+  }
+
+  if (media.source === "audio") {
+    const { data: track, error } = await supabase.from("audio_tracks").select("*").eq("id", media.id).single();
+    if (error) throw error;
+    await deleteAudioTrack(supabase, track as AudioTrack);
+    return;
+  }
+
+  if (media.source === "sound") {
+    const { data: effect, error } = await supabase.from("sound_effects").select("*").eq("id", media.id).single();
+    if (error) throw error;
+    await deleteSoundEffect(supabase, effect as SoundEffect);
+    return;
+  }
+
+  const { data: asset, error } = await supabase.from("media_assets").select("*").eq("id", media.id).single();
+  if (error) throw error;
+  await deleteMediaAsset(supabase, asset as MediaAsset);
+}
+
 export function isSuperAdmin(profile: Profile) {
   return profile.email.toLowerCase() === "galandar@gmail.com";
 }
@@ -224,12 +358,22 @@ export async function createGameInSupabase(
       title: values.sceneTitle,
       description: values.sceneDescription,
       image_url: values.sceneImageUrl,
+      media_type: "image",
       created_by: profile.id
     })
     .select("*")
     .single();
 
   if (sceneError) throw sceneError;
+
+  if (values.sceneImageUrl) {
+    await createMediaAsset(supabase, room.id, profile, {
+      title: `${values.sceneTitle} - scena iniziale`,
+      assetType: "image",
+      url: values.sceneImageUrl,
+      tags: ["scena", "iniziale"]
+    });
+  }
 
   const { data: audio, error: audioError } = await supabase
     .from("audio_tracks")
