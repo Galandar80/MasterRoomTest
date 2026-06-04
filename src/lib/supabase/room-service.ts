@@ -186,9 +186,9 @@ export async function listAllMediaForSuperAdmin(supabase: DatabaseClient, profil
 
   const [{ data: scenes, error: scenesError }, { data: audioTracks, error: audioError }, { data: soundEffects, error: soundError }, { data: mediaAssets, error: mediaError }] =
     await Promise.all([
-      supabase.from("scenes").select("*, rooms(name,campaigns(title))").order("created_at", { ascending: false }),
-      supabase.from("audio_tracks").select("*, rooms(name,campaigns(title))").neq("audio_url", "").order("created_at", { ascending: false }),
-      supabase.from("sound_effects").select("*, rooms(name,campaigns(title))").neq("audio_url", "").order("created_at", { ascending: false }),
+      supabase.from("scenes").select("*, rooms!scenes_room_id_fkey(name,campaigns(title))").order("created_at", { ascending: false }),
+      supabase.from("audio_tracks").select("*, rooms!audio_tracks_room_id_fkey(name,campaigns(title))").neq("audio_url", "").order("created_at", { ascending: false }),
+      supabase.from("sound_effects").select("*, rooms!sound_effects_room_id_fkey(name,campaigns(title))").neq("audio_url", "").order("created_at", { ascending: false }),
       supabase.from("media_assets").select("*, rooms(name,campaigns(title))").order("created_at", { ascending: false })
     ]);
 

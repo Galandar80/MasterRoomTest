@@ -786,27 +786,31 @@ function SceneManager({
             <option value="image">Immagine 16:9</option>
             <option value="video">Video MP4 in scena</option>
           </select>
-          {mediaType === "image" ? (
-            <>
-              <input className="field px-3 py-2 text-sm" placeholder="Link immagine 16:9" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
-              <label className="director-upload-target">
-                Carica immagine 16:9
-                <input className="sr-only" type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0])} />
-              </label>
-            </>
-          ) : (
-            <>
-              <input className="field px-3 py-2 text-sm" placeholder="Link video MP4" value={videoUrl} onChange={(event) => setVideoUrl(event.target.value)} />
-              <label className="director-upload-target">
-                Carica video MP4
-                <input className="sr-only" type="file" accept="video/mp4,video/*" onChange={(event) => setVideoFile(event.target.files?.[0])} />
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-200">
-                <input type="checkbox" checked={loopVideo} onChange={(event) => setLoopVideo(event.target.checked)} />
-                Ripeti video in loop
-              </label>
-            </>
-          )}
+          <input className="field px-3 py-2 text-sm" placeholder="Link immagine 16:9" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
+          <label className="director-upload-target">
+            {imageFile ? imageFile.name : "Carica immagine 16:9"}
+            <input className="sr-only" type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0])} />
+          </label>
+          <input className="field px-3 py-2 text-sm" placeholder="Link video MP4 in loop" value={videoUrl} onChange={(event) => {
+            setVideoUrl(event.target.value);
+            if (event.target.value.trim()) setMediaType("video");
+          }} />
+          <label className="director-upload-target border-purple-400/35 bg-purple-500/10 text-purple-100">
+            {videoFile ? videoFile.name : "Carica video MP4 in loop"}
+            <input
+              className="sr-only"
+              type="file"
+              accept="video/mp4,video/*"
+              onChange={(event) => {
+                setVideoFile(event.target.files?.[0]);
+                if (event.target.files?.[0]) setMediaType("video");
+              }}
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <input type="checkbox" checked={loopVideo} onChange={(event) => setLoopVideo(event.target.checked)} />
+            Ripeti video in loop
+          </label>
           <select className="field px-3 py-2 text-sm" value={visibility} onChange={(event) => setVisibility(event.target.value as SceneVisibility)}>
             <option value="public">Scena pubblica</option>
             <option value="private">Scena privata</option>
