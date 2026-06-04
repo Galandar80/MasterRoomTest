@@ -635,22 +635,29 @@ export async function createScene(
     loopVideo?: boolean;
     visibility?: "public" | "private";
     visibleUserIds?: string[];
+    linkedAudioId?: string | null;
   }
 ) {
+  const insertPayload: Record<string, unknown> = {
+    room_id: roomId,
+    title: values.title,
+    description: values.description,
+    image_url: values.imageUrl,
+    media_type: values.mediaType ?? "image",
+    video_url: values.videoUrl || null,
+    loop_video: values.loopVideo ?? true,
+    visibility: values.visibility ?? "public",
+    visible_user_ids: values.visibleUserIds ?? [],
+    created_by: profile.id
+  };
+
+  if (values.linkedAudioId) {
+    insertPayload.linked_audio_id = values.linkedAudioId;
+  }
+
   const { data, error } = await supabase
     .from("scenes")
-    .insert({
-      room_id: roomId,
-      title: values.title,
-      description: values.description,
-      image_url: values.imageUrl,
-      media_type: values.mediaType ?? "image",
-      video_url: values.videoUrl || null,
-      loop_video: values.loopVideo ?? true,
-      visibility: values.visibility ?? "public",
-      visible_user_ids: values.visibleUserIds ?? [],
-      created_by: profile.id
-    })
+    .insert(insertPayload)
     .select("*")
     .single();
 
@@ -729,7 +736,7 @@ export async function deleteNpc(supabase: DatabaseClient, npc: Npc) {
 export async function createInventoryItem(
   supabase: DatabaseClient,
   characterId: string,
-  values: { name: string; description: string; quantity: number; isPublic: boolean; masterNotes?: string }
+  values: { name: string; description: string; quantity: number; imageUrl?: string; isPublic: boolean; masterNotes?: string }
 ) {
   const { data, error } = await supabase
     .from("inventory_items")
@@ -738,6 +745,7 @@ export async function createInventoryItem(
       name: values.name,
       description: values.description,
       quantity: values.quantity,
+      image_url: values.imageUrl || null,
       is_public: values.isPublic,
       master_notes: values.masterNotes || null
     })
@@ -924,8 +932,13 @@ export async function rollDiceRequest(supabase: DatabaseClient, request: DiceReq
   return data as DiceRequest;
 }
 
-export async function updateCurrentScene(supabase: DatabaseClient, roomId: string, sceneId: string) {
-  const { error } = await supabase.from("rooms").update({ current_scene_id: sceneId }).eq("id", roomId);
+export async function updateCurrentScene(supabase: DatabaseClient, roomId: string, sceneId: string, linkedAudioId?: string | null) {
+  const update: Partial<Room> = { current_scene_id: sceneId };
+  if (linkedAudioId) {
+    update.current_audio_id = linkedAudioId;
+  }
+
+  const { error } = await supabase.from("rooms").update(update).eq("id", roomId);
   if (error) throw error;
 }
 

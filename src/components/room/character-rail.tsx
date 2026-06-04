@@ -41,8 +41,10 @@ export function CharacterRail({ characters, inventory = [], presence = [], side 
               <div className="player-public-inventory grid gap-1 text-xs text-slate-300">
                 <p>Oggetti visibili</p>
                 {inventory.filter((item) => item.character_id === character.id && item.is_public).map((item) => (
-                  <span key={item.id} className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-100">
-                    {item.name} x{item.quantity}
+                  <span key={item.id} className="player-public-item">
+                    {item.image_url ? <span className="player-public-item-thumb" style={{ backgroundImage: `url(${item.image_url})` }} /> : null}
+                    <span className="min-w-0 truncate">{item.name}</span>
+                    <strong>x{item.quantity}</strong>
                   </span>
                 ))}
                 {!inventory.some((item) => item.character_id === character.id && item.is_public) ? <span className="text-slate-500">Nessun oggetto pubblico.</span> : null}

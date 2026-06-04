@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { LogIn, Shield, UserPlus } from "lucide-react";
 import { getAuthRedirectUrl } from "@/lib/auth-config";
-import { createClient, demoMode } from "@/lib/supabase/client";
+import { clearSupabaseAuthStorage, createClient, demoMode } from "@/lib/supabase/client";
 
 type AuthGateProps = {
   children: React.ReactNode;
@@ -25,6 +25,7 @@ export function AuthGate({ children }: AuthGateProps) {
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
       const urlError = params.get("error_description") ?? params.get("error");
+      let hasSession = false;
 
       if (urlError) {
         setMessage(readAuthError(urlError));
@@ -49,10 +50,24 @@ export function AuthGate({ children }: AuthGateProps) {
         setIsBusy(false);
       }
 
-      const { data } = await supabase!.auth.getSession();
-      setIsAuthed(Boolean(data.session));
+      try {
+        const { data, error } = await supabase!.auth.getSession();
+        if (error) {
+          throw error;
+        }
+        hasSession = Boolean(data.session);
+        setIsAuthed(hasSession);
+      } catch (sessionError) {
+        if (isInvalidRefreshTokenError(sessionError)) {
+          clearSupabaseAuthStorage();
+          setIsAuthed(false);
+          setMessage("Sessione locale scaduta o non valida. Accedi di nuovo.");
+        } else {
+          setMessage(readAuthError(readUnknownError(sessionError)));
+        }
+      }
 
-      if (code && !data.session) {
+      if (code && !hasSession) {
         setMessage("Google ha risposto, ma Supabase non ha creato una sessione locale. Controlla Site URL e Redirect URLs in Supabase.");
       }
     }
@@ -117,6 +132,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
     setIsBusy(true);
     setMessage("");
+    clearSupabaseAuthStorage();
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -283,4 +299,12 @@ function readAuthError(message: string) {
   }
 
   return message;
+}
+
+function isInvalidRefreshTokenError(error: unknown) {
+  return readUnknownError(error).toLowerCase().includes("invalid refresh token");
+}
+
+function readUnknownError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }

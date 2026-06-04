@@ -23,8 +23,6 @@ type PlayerRoomProps = {
   onPrivateSend: (content: string, recipientUserId: string) => void;
   onOffSend: (content: string) => void;
   onTyping: (channel: "gdr" | "off" | "private", recipientUserId?: string | null) => void;
-  onEditMessage: (message: Message, content: string) => void;
-  onDeleteMessage: (message: Message) => void;
   onRollDice: (request: DiceRequest) => void;
   onCreateNote: (values: { title: string; content: string }) => void;
   onLoadOlderMessages: () => void;
@@ -34,7 +32,7 @@ type PlayerRoomProps = {
 type MobileTab = "chat" | "sheet" | "off" | "private";
 type UtilityPanel = "notes" | "inventory" | "private" | "help" | null;
 
-export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend, onOffSend, onTyping, onEditMessage, onDeleteMessage, onRollDice, onCreateNote, onLoadOlderMessages, onExportMessages }: PlayerRoomProps) {
+export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend, onOffSend, onTyping, onRollDice, onCreateNote, onLoadOlderMessages, onExportMessages }: PlayerRoomProps) {
   const [playerText, setPlayerText] = useState("");
   const [offText, setOffText] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("chat");
@@ -84,8 +82,6 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
             disabled={chatDisabledForPlayer}
             disabledReason={disabledReason}
             onTyping={() => onTyping("gdr")}
-            onEditMessage={onEditMessage}
-            onDeleteMessage={onDeleteMessage}
             onLoadOlder={onLoadOlderMessages}
             hasOlderMessages={state.hasOlderMessages}
             currentUserId={state.profile.id}
@@ -118,7 +114,6 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
                 masterId={state.campaigns[0].master_id}
                 isMaster={false}
                 onSend={onPrivateSend}
-                onDeleteMessage={onDeleteMessage}
               />
             </div>
           </details>
@@ -136,7 +131,6 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
               onOffSend(offText.trim());
               setOffText("");
             }}
-            onDeleteMessage={onDeleteMessage}
           />
         </div>
         <AudioPlayer track={currentAudio} />
@@ -153,7 +147,6 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
           onClose={() => setUtilityPanel(null)}
           onCreateNote={onCreateNote}
           onPrivateSend={onPrivateSend}
-          onDeleteMessage={onDeleteMessage}
         />
       ) : null}
     </section>
@@ -250,8 +243,7 @@ function PlayerUtilityModal({
   character,
   onClose,
   onCreateNote,
-  onPrivateSend,
-  onDeleteMessage
+  onPrivateSend
 }: {
   panel: UtilityPanel;
   state: RoomState;
@@ -259,7 +251,6 @@ function PlayerUtilityModal({
   onClose: () => void;
   onCreateNote: (values: { title: string; content: string }) => void;
   onPrivateSend: (content: string, recipientUserId: string) => void;
-  onDeleteMessage: (message: Message) => void;
 }) {
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
@@ -320,12 +311,17 @@ function PlayerUtilityModal({
           <div className="player-modal-list grid gap-2">
             {characterItems.length ? characterItems.map((item) => (
               <article key={item.id} className="player-item-card">
-                <div className="flex items-center justify-between gap-3">
-                  <p>{item.name} <span>x{item.quantity}</span></p>
-                  <span>{item.is_public ? "Pubblico" : "Privato"}</span>
+                <div className="flex items-start gap-3">
+                  {item.image_url ? <div className="player-item-thumb" style={{ backgroundImage: `url(${item.image_url})` }} /> : null}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <p>{item.name} <span>x{item.quantity}</span></p>
+                      <span>{item.is_public ? "Pubblico" : "Privato"}</span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-stone-300">{item.description || "Nessuna descrizione."}</p>
+                    {item.player_notes ? <p className="mt-2 rounded-md bg-black/25 p-2 text-xs text-stone-400">{item.player_notes}</p> : null}
+                  </div>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-stone-300">{item.description || "Nessuna descrizione."}</p>
-                {item.player_notes ? <p className="mt-2 rounded-md bg-black/25 p-2 text-xs text-stone-400">{item.player_notes}</p> : null}
               </article>
             )) : <PlayerModalEmpty title="Inventario vuoto" text="Gli oggetti assegnati dal Master appariranno qui." />}
           </div>
@@ -339,7 +335,6 @@ function PlayerUtilityModal({
             masterId={state.campaigns[0].master_id}
             isMaster={false}
             onSend={onPrivateSend}
-            onDeleteMessage={onDeleteMessage}
           />
         ) : null}
 

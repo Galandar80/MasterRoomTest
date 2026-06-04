@@ -54,6 +54,7 @@ export type Scene = {
   loop_video?: boolean;
   visibility?: SceneVisibility;
   visible_user_ids?: string[];
+  linked_audio_id?: string | null;
   created_by: string;
   created_at: string;
 };

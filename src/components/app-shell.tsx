@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, LogOut, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Loader2, LogOut, MessageSquareText, Sparkles, X } from "lucide-react";
 import { CampaignLobby } from "@/components/campaign-lobby";
 import { CharacterSetupForm, type CharacterSetupValues } from "@/components/lobby/character-setup-form";
 import { CreateGameForm, type CreateGameValues } from "@/components/lobby/create-game-form";
@@ -11,7 +11,7 @@ import { MasterControlRoom } from "@/components/master-control-room";
 import { PlayerRoom } from "@/components/player-room";
 import { SuperAdminRooms } from "@/components/superadmin-rooms";
 import { demoRoomState } from "@/lib/demo-data";
-import { createClient, demoMode } from "@/lib/supabase/client";
+import { clearSupabaseAuthStorage, createClient, demoMode } from "@/lib/supabase/client";
 import {
   createGameInSupabase,
   createAudioTrack,
@@ -62,6 +62,16 @@ import type { AdminMediaOverview, AdminRoomOverview } from "@/lib/supabase/room-
 import type { AudioTrack, DiceRequest, InventoryItem, MediaAsset, Message, Npc, Room, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
 
 type View = "menu" | "create" | "join" | "character" | "player" | "master" | "superadmin";
+type CinematicEvent =
+  | { id: string; kind: "scene"; title: string; detail: string; imageUrl?: string; mediaType?: SceneMediaType }
+  | { id: string; kind: "npc"; title: string; detail: string; imageUrl?: string }
+  | { id: string; kind: "sound"; title: string; detail: string }
+  | { id: string; kind: "whisper"; title: string; detail: string };
+type CinematicEventPayload =
+  | { kind: "scene"; title: string; detail: string; imageUrl?: string; mediaType?: SceneMediaType }
+  | { kind: "npc"; title: string; detail: string; imageUrl?: string }
+  | { kind: "sound"; title: string; detail: string }
+  | { kind: "whisper"; title: string; detail: string };
 
 export function AppShell() {
   const [view, setView] = useState<View>("menu");
@@ -74,6 +84,11 @@ export function AppShell() {
   const [actionLog, setActionLog] = useState<{ id: string; label: string; detail?: string; created_at: string }[]>([]);
   const [adminRooms, setAdminRooms] = useState<AdminRoomOverview[]>([]);
   const [adminMedia, setAdminMedia] = useState<AdminMediaOverview[]>([]);
+  const [cinematicEvent, setCinematicEvent] = useState<CinematicEvent | null>(null);
+  const sceneEventRef = useRef(roomState.scene.id);
+  const spotlightEventRef = useRef(roomState.room.spotlight_npc_id ?? "");
+  const soundEffectEventRef = useRef(roomState.room.current_sound_effect_id ?? "");
+  const privateEventIdsRef = useRef(new Set(roomState.privateMessages.map((message) => message.id)));
   const supabase = createClient();
   const currentAudio = useMemo(
     () => roomState.audioTracks.find((track) => track.id === roomState.room.current_audio_id) ?? roomState.audioTracks[0],
@@ -90,6 +105,13 @@ export function AppShell() {
     setActionLog((items) => [{ id: crypto.randomUUID(), label, detail, created_at: new Date().toISOString() }, ...items].slice(0, 12));
   }
 
+  function showCinematicEvent(event: CinematicEventPayload) {
+    setCinematicEvent({ ...event, id: crypto.randomUUID() });
+    window.setTimeout(() => {
+      setCinematicEvent((current) => (current?.title === event.title && current.kind === event.kind ? null : current));
+    }, event.kind === "scene" ? 4800 : 4200);
+  }
+
   useEffect(() => {
     if (!supabase || demoMode) {
       setIsLoading(false);
@@ -102,11 +124,20 @@ export function AppShell() {
     async function load() {
       try {
         setError("");
-        const { data } = await withClientTimeout(
+        const { data, error: authError } = await withClientTimeout(
           supabase!.auth.getUser(),
           6000,
           "Supabase non ha risposto in tempo durante il controllo sessione. Puoi comunque usare il menu e riprovare."
         );
+        if (authError) {
+          if (readError(authError).toLowerCase().includes("invalid refresh token")) {
+            clearSupabaseAuthStorage();
+            setStatus("Sessione scaduta: accedi di nuovo");
+            setIsLoading(false);
+            return;
+          }
+          throw authError;
+        }
         if (!data.user) {
           setIsLoading(false);
           return;
@@ -265,6 +296,79 @@ export function AppShell() {
     };
   }, [supabase, hasCurrentSession, roomState.room.id, roomState.profile, currentCharacter]);
 
+  useEffect(() => {
+    if (!hasCurrentSession || !roomState.scene.id) return;
+    if (sceneEventRef.current === roomState.scene.id) return;
+
+    sceneEventRef.current = roomState.scene.id;
+    showCinematicEvent({
+      kind: "scene",
+      title: roomState.scene.title,
+      detail: roomState.scene.description || "La scena cambia. Tutti gli occhi si spostano sul nuovo momento.",
+      imageUrl: roomState.scene.image_url,
+      mediaType: roomState.scene.media_type
+    });
+  }, [hasCurrentSession, roomState.scene.id, roomState.scene.title, roomState.scene.description, roomState.scene.image_url, roomState.scene.media_type]);
+
+  useEffect(() => {
+    if (view !== "player" || !hasCurrentSession) {
+      privateEventIdsRef.current = new Set(roomState.privateMessages.map((message) => message.id));
+      return;
+    }
+
+    const seen = privateEventIdsRef.current;
+    const newest = [...roomState.privateMessages]
+      .filter((message) => !seen.has(message.id))
+      .filter((message) => message.recipient_user_id === roomState.profile.id || message.sender_user_id === roomState.profile.id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+
+    privateEventIdsRef.current = new Set(roomState.privateMessages.map((message) => message.id));
+
+    if (newest) {
+      showCinematicEvent({
+        kind: "whisper",
+        title: newest.sender_user_id === roomState.profile.id ? "Sussurro inviato" : "Sussurro del Master",
+        detail: newest.content
+      });
+    }
+  }, [hasCurrentSession, roomState.privateMessages, roomState.profile.id, view]);
+
+  useEffect(() => {
+    if (!hasCurrentSession || view !== "player") return;
+    const nextSpotlightId = roomState.room.spotlight_npc_id ?? "";
+    if (spotlightEventRef.current === nextSpotlightId) return;
+
+    spotlightEventRef.current = nextSpotlightId;
+    const npc = roomState.npcs.find((item) => item.id === nextSpotlightId);
+    const canSeePrivate =
+      roomState.room.spotlight_visibility !== "private" || Boolean(roomState.room.spotlight_user_ids?.includes(roomState.profile.id));
+
+    if (npc && roomState.room.spotlight_visibility !== "off" && canSeePrivate) {
+      showCinematicEvent({
+        kind: "npc",
+        title: npc.name,
+        detail: npc.description || "Una nuova presenza entra nella scena.",
+        imageUrl: npc.portrait_url
+      });
+    }
+  }, [hasCurrentSession, roomState.npcs, roomState.profile.id, roomState.room.spotlight_npc_id, roomState.room.spotlight_user_ids, roomState.room.spotlight_visibility, view]);
+
+  useEffect(() => {
+    if (!hasCurrentSession || view !== "player") return;
+    const nextSoundId = roomState.room.current_sound_effect_id ?? "";
+    if (soundEffectEventRef.current === nextSoundId) return;
+
+    soundEffectEventRef.current = nextSoundId;
+    const effect = roomState.soundEffects.find((item) => item.id === nextSoundId);
+    if (effect) {
+      showCinematicEvent({
+        kind: "sound",
+        title: effect.title,
+        detail: "Un effetto sonoro attraversa la scena."
+      });
+    }
+  }, [hasCurrentSession, roomState.room.current_sound_effect_id, roomState.soundEffects, view]);
+
   async function createGame(values: CreateGameValues) {
     const inviteCode = values.inviteCode.trim().toUpperCase() || generateInviteCode(values.campaignTitle);
 
@@ -302,6 +406,7 @@ export function AppShell() {
       media_type: "image",
       video_url: null,
       loop_video: true,
+      linked_audio_id: null,
       created_at: new Date().toISOString()
     };
 
@@ -468,10 +573,12 @@ export function AppShell() {
       return;
     }
 
+    const linkedAudioId = scene.linked_audio_id ?? null;
+
     if (supabase && !demoMode) {
       try {
         setError("");
-        await updateCurrentScene(supabase, roomState.room.id, scene.id);
+        await updateCurrentScene(supabase, roomState.room.id, scene.id, linkedAudioId);
       } catch (sceneError) {
         setError(readError(sceneError));
       }
@@ -480,8 +587,13 @@ export function AppShell() {
     setRoomState((state) => ({
       ...state,
       scene,
-      room: { ...state.room, current_scene_id: scene.id }
+      room: { ...state.room, current_scene_id: scene.id, current_audio_id: linkedAudioId || state.room.current_audio_id }
     }));
+
+    if (linkedAudioId) {
+      const linkedTrack = roomState.audioTracks.find((track) => track.id === linkedAudioId);
+      logAction("Scena e audio sincronizzati", linkedTrack ? `${scene.title} · ${linkedTrack.title}` : scene.title);
+    }
   }
 
   async function changeAudio(track: AudioTrack) {
@@ -606,6 +718,7 @@ export function AppShell() {
     loopVideo?: boolean;
     visibility?: SceneVisibility;
     visibleUserIds?: string[];
+    linkedAudioId?: string | null;
   }) {
     if (!isCurrentMaster) return;
 
@@ -634,12 +747,12 @@ export function AppShell() {
           });
           setRoomState((state) => ({ ...state, mediaAssets: [asset, ...state.mediaAssets.filter((item) => item.id !== asset.id)] }));
         }
-        await updateCurrentScene(supabase, roomState.room.id, scene.id);
+        await updateCurrentScene(supabase, roomState.room.id, scene.id, scene.linked_audio_id ?? null);
         setRoomState((state) => ({
           ...state,
           scene,
           scenes: [scene, ...state.scenes.filter((item) => item.id !== scene.id)],
-          room: { ...state.room, current_scene_id: scene.id }
+          room: { ...state.room, current_scene_id: scene.id, current_audio_id: scene.linked_audio_id || state.room.current_audio_id }
         }));
       }
       setStatus("Scena salvata");
@@ -917,7 +1030,7 @@ export function AppShell() {
     }
   }
 
-  async function addInventoryItem(characterId: string, values: { name: string; description: string; quantity: number; isPublic: boolean; masterNotes: string }) {
+  async function addInventoryItem(characterId: string, values: { name: string; description: string; quantity: number; imageUrl: string; isPublic: boolean; masterNotes: string }) {
     if (!isCurrentMaster) return;
 
     try {
@@ -936,7 +1049,7 @@ export function AppShell() {
               name: values.name,
               description: values.description,
               quantity: values.quantity,
-              image_url: null,
+              image_url: values.imageUrl || null,
               is_public: values.isPublic,
               master_notes: values.masterNotes,
               player_notes: null
@@ -1151,9 +1264,7 @@ export function AppShell() {
   }
 
   async function removeMessage(message: Message) {
-    const allMessages = [...roomState.messages, ...roomState.offMessages, ...roomState.privateMessages];
-    const latestOwnMessage = [...allMessages].reverse().find((item) => item.sender_user_id === roomState.profile.id);
-    if (!isCurrentMaster && latestOwnMessage?.id !== message.id) return;
+    if (!isCurrentMaster) return;
     const confirmed = window.confirm("Vuoi eliminare questo messaggio?");
     if (!confirmed) return;
 
@@ -1175,8 +1286,7 @@ export function AppShell() {
   }
 
   async function editOwnMessage(message: Message, content: string) {
-    const canEdit = message.sender_user_id === roomState.profile.id || isCurrentMaster;
-    if (!canEdit || !content.trim()) return;
+    if (!isCurrentMaster || !content.trim()) return;
 
     try {
       setError("");
@@ -1389,8 +1499,6 @@ export function AppShell() {
           onPrivateSend={(content, recipientUserId) => publishMessage(content, true, recipientUserId, "player")}
           onOffSend={(content) => publishMessage(content, false, undefined, "player", "off")}
           onTyping={markTyping}
-          onEditMessage={editOwnMessage}
-          onDeleteMessage={removeMessage}
           onRollDice={rollDice}
           onCreateNote={addPersonalNote}
           onLoadOlderMessages={loadOlderMessages}
@@ -1440,6 +1548,33 @@ export function AppShell() {
           onDeleteRoom={closeAndDeleteRoom}
         />
       ) : null}
+      {cinematicEvent ? <CinematicEventOverlay event={cinematicEvent} onClose={() => setCinematicEvent(null)} /> : null}
+    </div>
+  );
+}
+
+function CinematicEventOverlay({ event, onClose }: { event: CinematicEvent; onClose: () => void }) {
+  return (
+    <div className={`cinematic-event-overlay cinematic-event-overlay--${event.kind}`} role="status" aria-live="polite">
+      <section className="cinematic-event-card">
+        <button type="button" onClick={onClose} aria-label="Chiudi evento cinematografico">
+          <X size={16} />
+        </button>
+        {(event.kind === "scene" || event.kind === "npc") && event.imageUrl ? (
+          <div className="cinematic-event-media" style={{ backgroundImage: event.kind === "scene" && event.mediaType === "video" ? undefined : `url(${event.imageUrl})` }}>
+            {event.kind === "scene" && event.mediaType === "video" ? <MessageSquareText size={34} /> : null}
+          </div>
+        ) : (
+          <div className="cinematic-event-symbol">
+            <MessageSquareText size={28} />
+          </div>
+        )}
+        <p className="cinematic-event-kicker">
+          {event.kind === "scene" ? "Cambio scena" : event.kind === "npc" ? "Entra in scena" : event.kind === "sound" ? "Segnale sonoro" : "Messaggio segreto"}
+        </p>
+        <h2>{event.title}</h2>
+        <p>{event.detail}</p>
+      </section>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ArrowLeft, AudioLines, Bell, Eye, Film, ImageUp, Library, MessageSquareText, Plus, Radio, Save, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, X } from "lucide-react";
+import { Activity, ArrowLeft, AudioLines, Bell, Eye, Film, ImageUp, Library, MessageSquareText, Plus, Radio, Save, ScrollText, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, X } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
 import type { AudioTrack, InventoryItem, MediaAsset, Message, Npc, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
@@ -39,6 +39,7 @@ type MasterControlRoomProps = {
     loopVideo?: boolean;
     visibility?: SceneVisibility;
     visibleUserIds?: string[];
+    linkedAudioId?: string | null;
   }) => void | Promise<void>;
   onDeleteScene: (scene: Scene) => void | Promise<void>;
   onCreateAudio: (values: { title: string; audioUrl: string; loop: boolean; audioFile?: File }) => void | Promise<void>;
@@ -49,7 +50,7 @@ type MasterControlRoomProps = {
   onStopSoundEffect: () => void | Promise<void>;
   onCreateNpc: (values: { name: string; color: string; description: string; portraitUrl: string }) => void | Promise<void>;
   onDeleteNpc: (npc: Npc) => void | Promise<void>;
-  onCreateInventoryItem: (characterId: string, values: { name: string; description: string; quantity: number; isPublic: boolean; masterNotes: string }) => void | Promise<void>;
+  onCreateInventoryItem: (characterId: string, values: { name: string; description: string; quantity: number; imageUrl: string; isPublic: boolean; masterNotes: string }) => void | Promise<void>;
   onDeleteInventoryItem: (item: InventoryItem) => void | Promise<void>;
   onUpdateChatPermissions: (values: { chatEnabled: boolean; mutedUserIds: string[] }) => void | Promise<void>;
   onCreateDiceRequest: (values: { diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void | Promise<void>;
@@ -118,6 +119,9 @@ export function MasterControlRoom({
     if (!masterChatText.trim()) return;
     onPublicMessage(masterChatText.trim());
     setMasterChatText("");
+  };
+  const launchQuickCue = (cue: DirectorCue) => {
+    onPublicMessage(cue.message);
   };
 
   return (
@@ -302,6 +306,8 @@ export function MasterControlRoom({
           onSaveRoom={onSaveRoom}
           onDeleteRoom={onDeleteRoom}
           onOpenTool={setActiveTool}
+          onQuickCue={launchQuickCue}
+          actionLog={actionLog}
         />
       </div>
       {isSoundbarOpen ? (
@@ -328,7 +334,9 @@ function DirectorRightRail({
   onAudioChange,
   onSaveRoom,
   onDeleteRoom,
-  onOpenTool
+  onOpenTool,
+  onQuickCue,
+  actionLog
 }: {
   state: RoomState;
   identityId: string;
@@ -339,6 +347,8 @@ function DirectorRightRail({
   onSaveRoom: () => void;
   onDeleteRoom: () => void;
   onOpenTool: (tool: ControlTool) => void;
+  onQuickCue: (cue: DirectorCue) => void;
+  actionLog: { id: string; label: string; detail?: string; created_at: string }[];
 }) {
   const activeIdentity = identityId === "master" ? "Master / Narratore" : state.npcs.find((npc) => npc.id === identityId)?.name ?? "Master / Narratore";
   const masterAvatar = state.profile.username.slice(0, 1).toUpperCase();
@@ -386,6 +396,10 @@ function DirectorRightRail({
           <RailAction label="Giocatori" icon={<UsersRound size={17} />} onClick={() => onOpenTool("players")} />
         </div>
       </section>
+
+      <DirectorCuePanel onLaunch={onQuickCue} />
+      <DirectorTimelinePanel state={state} actionLog={actionLog} />
+      <DirectorRecapPanel state={state} currentAudio={currentAudio} actionLog={actionLog} />
 
       <section className="director-rail-section">
         <h3 className="director-mini-title">Scena</h3>
@@ -441,6 +455,191 @@ function DirectorRightRail({
         </button>
       </div>
     </aside>
+  );
+}
+
+function DirectorTimelinePanel({ state, actionLog }: { state: RoomState; actionLog: { id: string; label: string; detail?: string; created_at: string }[] }) {
+  const recentMessages = [...state.messages, ...state.offMessages, ...state.privateMessages]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 3);
+  const items = [
+    { id: `scene-${state.scene.id}`, label: "Scena attiva", detail: state.scene.title, created_at: state.scene.created_at },
+    ...actionLog.slice(0, 3),
+    ...recentMessages.map((message) => ({
+      id: message.id,
+      label: message.is_private ? "Sussurro" : message.channel === "off" ? "OFF GDR" : message.sender_display_name,
+      detail: message.content,
+      created_at: message.created_at
+    }))
+  ]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 6);
+
+  return (
+    <section className="director-rail-section director-timeline-panel">
+      <h3 className="director-mini-title">Timeline sessione</h3>
+      <div className="mt-3 grid gap-2">
+        {items.map((item) => (
+          <article key={item.id} className="director-timeline-item">
+            <time>{shortTime(item.created_at)}</time>
+            <div>
+              <p>{item.label}</p>
+              {item.detail ? <span>{item.detail}</span> : null}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DirectorRecapPanel({
+  state,
+  currentAudio,
+  actionLog
+}: {
+  state: RoomState;
+  currentAudio: AudioTrack;
+  actionLog: { id: string; label: string; detail?: string; created_at: string }[];
+}) {
+  const pinnedMessages = [...state.messages, ...state.offMessages, ...state.privateMessages]
+    .filter((message) => message.is_pinned)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const recentMessages = state.messages
+    .slice(-12)
+    .map((message) => `[${shortTime(message.created_at)}] ${message.sender_display_name}: ${message.content}`);
+  const recentActions = actionLog
+    .slice(0, 10)
+    .map((entry) => `[${shortTime(entry.created_at)}] ${entry.label}${entry.detail ? ` - ${entry.detail}` : ""}`);
+  const campaignTitle = state.campaigns.find((campaign) => campaign.id === state.room.campaign_id)?.title ?? state.campaigns[0]?.title ?? "Campagna";
+  const players = state.characters
+    .map((character) => {
+      const name = `${character.character_name} ${character.character_surname}`.trim();
+      return `- ${name || "Personaggio"} | PF ${character.hp}/10 | Mente ${character.mental_state || "n/d"} | Stato ${character.visible_status || "n/d"}`;
+    })
+    .join("\n");
+
+  const downloadRecap = () => {
+    const lines = [
+      "GDR MASTER ROOM - RECAP SESSIONE",
+      "================================",
+      "",
+      `Campagna: ${campaignTitle}`,
+      `Stanza: ${state.room.name}`,
+      `Codice invito: ${state.room.invite_code}`,
+      `Scena finale: ${state.scene.title}`,
+      `Descrizione scena: ${state.scene.description || "Nessuna descrizione."}`,
+      `Audio finale: ${currentAudio.title}`,
+      `Generato: ${new Date().toLocaleString("it-IT")}`,
+      "",
+      "GIOCATORI",
+      "---------",
+      players || "Nessun personaggio registrato.",
+      "",
+      "MESSAGGI PINNATI",
+      "----------------",
+      pinnedMessages.length
+        ? pinnedMessages.map((message) => `[${shortTime(message.created_at)}] ${message.sender_display_name}: ${message.content}`).join("\n")
+        : "Nessun messaggio pinnato.",
+      "",
+      "TIMELINE REGIA",
+      "--------------",
+      recentActions.length ? recentActions.join("\n") : "Nessuna azione di regia registrata.",
+      "",
+      "ULTIMI MESSAGGI IN CHAT",
+      "----------------------",
+      recentMessages.length ? recentMessages.join("\n") : "Nessun messaggio recente.",
+      ""
+    ];
+    downloadTextFile(`recap-${state.room.invite_code.toLowerCase()}.txt`, lines.join("\n"));
+  };
+
+  return (
+    <section className="director-rail-section director-recap-panel">
+      <h3 className="director-mini-title">Recap finale</h3>
+      <p className="mt-2 text-xs leading-5 text-stone-400">
+        Genera una chiusura leggibile della sessione con scena, giocatori, pin e ultime azioni.
+      </p>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <span className="director-recap-stat">
+          <strong>{state.characters.length}</strong>
+          <small>PG</small>
+        </span>
+        <span className="director-recap-stat">
+          <strong>{pinnedMessages.length}</strong>
+          <small>Pin</small>
+        </span>
+        <span className="director-recap-stat">
+          <strong>{state.messages.length}</strong>
+          <small>Chat</small>
+        </span>
+      </div>
+      <button type="button" onClick={downloadRecap} className="director-cinematic-button mt-3 w-full">
+        <ScrollText size={16} />
+        Scarica recap
+      </button>
+    </section>
+  );
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+type DirectorCue = {
+  id: string;
+  label: string;
+  tone: "reveal" | "danger" | "vision" | "chapter";
+  message: string;
+};
+
+const directorCues: DirectorCue[] = [
+  {
+    id: "reveal",
+    label: "Rivelazione",
+    tone: "reveal",
+    message: "La verita emerge all'improvviso: un dettaglio impossibile cambia il senso di tutto cio che avete visto finora."
+  },
+  {
+    id: "danger",
+    label: "Pericolo",
+    tone: "danger",
+    message: "Qualcosa si muove nell'ombra. L'aria si tende, il silenzio si spezza, e ogni scelta ora puo avere un prezzo."
+  },
+  {
+    id: "vision",
+    label: "Visione",
+    tone: "vision",
+    message: "Per un istante la realta si piega: immagini, suoni e ricordi non vostri attraversano la stanza come un presagio."
+  },
+  {
+    id: "chapter",
+    label: "Fine capitolo",
+    tone: "chapter",
+    message: "La scena si chiude su questa immagine. Qualcosa e cambiato, e la storia non potra piu tornare al punto di prima."
+  }
+];
+
+function DirectorCuePanel({ onLaunch }: { onLaunch: (cue: DirectorCue) => void }) {
+  return (
+    <section className="director-rail-section director-cue-panel">
+      <h3 className="director-mini-title">Cue di regia</h3>
+      <p className="mt-2 text-xs leading-5 text-stone-400">Eventi narrativi rapidi da lanciare in chat quando serve cambiare ritmo.</p>
+      <div className="mt-3 grid gap-2">
+        {directorCues.map((cue) => (
+          <button key={cue.id} type="button" className={`director-cue-button director-cue-button--${cue.tone}`} onClick={() => onLaunch(cue)}>
+            <span>{cue.label}</span>
+            <small>Lancia evento</small>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -699,6 +898,7 @@ function SceneManager({
     loopVideo?: boolean;
     visibility?: SceneVisibility;
     visibleUserIds?: string[];
+    linkedAudioId?: string | null;
   }) => void | Promise<void>;
   onDeleteScene: (scene: Scene) => void | Promise<void>;
 }) {
@@ -711,6 +911,7 @@ function SceneManager({
   const [loopVideo, setLoopVideo] = useState(true);
   const [visibility, setVisibility] = useState<SceneVisibility>("public");
   const [visibleUserIds, setVisibleUserIds] = useState<string[]>([]);
+  const [linkedAudioId, setLinkedAudioId] = useState("");
   const [description, setDescription] = useState("");
 
   function toggleVisibleUser(userId: string) {
@@ -737,6 +938,11 @@ function SceneManager({
                   {scene.visibility === "private" ? <span className="ml-2 text-xs font-normal text-ember-100">Privata</span> : null}
                 </span>
                 <span className="line-clamp-2 text-xs leading-5 text-stone-400">{scene.description || "Nessuna descrizione."}</span>
+                {scene.linked_audio_id ? (
+                  <span className="mt-2 block text-xs text-brass">
+                    Audio: {state.audioTracks.find((track) => track.id === scene.linked_audio_id)?.title ?? "traccia collegata"}
+                  </span>
+                ) : null}
                 {scene.id === state.scene.id ? <span className="director-live-chip mt-2">In scena ora</span> : null}
               </button>
               <button
@@ -767,7 +973,8 @@ function SceneManager({
               videoFile,
               loopVideo,
               visibility,
-              visibleUserIds: visibility === "private" ? visibleUserIds : []
+              visibleUserIds: visibility === "private" ? visibleUserIds : [],
+              linkedAudioId: linkedAudioId || null
             });
             setTitle("");
             setImageUrl("");
@@ -777,6 +984,7 @@ function SceneManager({
             setLoopVideo(true);
             setVisibility("public");
             setVisibleUserIds([]);
+            setLinkedAudioId("");
             setDescription("");
           }}
         >
@@ -814,6 +1022,14 @@ function SceneManager({
           <select className="field px-3 py-2 text-sm" value={visibility} onChange={(event) => setVisibility(event.target.value as SceneVisibility)}>
             <option value="public">Scena pubblica</option>
             <option value="private">Scena privata</option>
+          </select>
+          <select className="field px-3 py-2 text-sm" value={linkedAudioId} onChange={(event) => setLinkedAudioId(event.target.value)}>
+            <option value="">Nessuna traccia collegata</option>
+            {state.audioTracks.map((track) => (
+              <option key={track.id} value={track.id}>
+                {track.title}
+              </option>
+            ))}
           </select>
           {visibility === "private" ? (
             <div className="director-sub-panel grid gap-2 rounded-lg p-2">
@@ -1388,12 +1604,13 @@ function InventoryPanel({
   onDeleteInventoryItem
 }: {
   state: RoomState;
-  onCreateInventoryItem: (characterId: string, values: { name: string; description: string; quantity: number; isPublic: boolean; masterNotes: string }) => void | Promise<void>;
+  onCreateInventoryItem: (characterId: string, values: { name: string; description: string; quantity: number; imageUrl: string; isPublic: boolean; masterNotes: string }) => void | Promise<void>;
   onDeleteInventoryItem: (item: InventoryItem) => void | Promise<void>;
 }) {
   const [characterId, setCharacterId] = useState(state.characters[0]?.id ?? "");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [isPublic, setIsPublic] = useState(false);
   const [masterNotes, setMasterNotes] = useState("");
@@ -1412,11 +1629,13 @@ function InventoryPanel({
             name: name.trim(),
             description: description.trim(),
             quantity,
+            imageUrl: imageUrl.trim(),
             isPublic,
             masterNotes: masterNotes.trim()
           });
           setName("");
           setDescription("");
+          setImageUrl("");
           setQuantity(1);
           setIsPublic(false);
           setMasterNotes("");
@@ -1447,6 +1666,7 @@ function InventoryPanel({
           value={description}
           onChange={(event) => setDescription(event.target.value)}
         />
+        <input className="field px-3 py-2 text-sm" placeholder="Link immagine oggetto" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
         <textarea
           className="field min-h-16 resize-none px-3 py-2 text-sm"
           placeholder="Note Master"
@@ -1464,6 +1684,7 @@ function InventoryPanel({
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {visibleInventory.map((item) => (
           <article key={item.id} className={`director-inventory-card ${item.is_public ? "is-public" : ""}`}>
+            {item.image_url ? <div className="director-inventory-thumb" style={{ backgroundImage: `url(${item.image_url})` }} /> : null}
             <div className="min-w-0">
               <p className="font-serif text-base text-white">
                 {item.name} <span className="text-xs text-slate-400">x{item.quantity}</span>

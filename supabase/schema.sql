@@ -72,6 +72,7 @@ create table if not exists public.scenes (
   loop_video boolean not null default true,
   visibility text not null default 'public' check (visibility in ('public', 'private')),
   visible_user_ids uuid[] not null default '{}',
+  linked_audio_id uuid,
   created_by uuid references public.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
@@ -81,6 +82,7 @@ alter table public.scenes add column if not exists video_url text;
 alter table public.scenes add column if not exists loop_video boolean not null default true;
 alter table public.scenes add column if not exists visibility text not null default 'public';
 alter table public.scenes add column if not exists visible_user_ids uuid[] not null default '{}';
+alter table public.scenes add column if not exists linked_audio_id uuid;
 
 create table if not exists public.npcs (
   id uuid primary key default gen_random_uuid(),
@@ -129,6 +131,11 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'rooms_current_sound_effect_id_fkey') then
     alter table public.rooms
       add constraint rooms_current_sound_effect_id_fkey foreign key (current_sound_effect_id) references public.sound_effects(id) on delete set null;
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'scenes_linked_audio_id_fkey') then
+    alter table public.scenes
+      add constraint scenes_linked_audio_id_fkey foreign key (linked_audio_id) references public.audio_tracks(id) on delete set null;
   end if;
 end $$;
 
@@ -315,6 +322,7 @@ create index if not exists idx_campaigns_master_created on public.campaigns(mast
 create index if not exists idx_rooms_campaign_created on public.rooms(campaign_id, created_at desc);
 create index if not exists idx_rooms_invite_code on public.rooms(invite_code);
 create index if not exists idx_scenes_room_created on public.scenes(room_id, created_at desc);
+create index if not exists idx_scenes_linked_audio on public.scenes(linked_audio_id);
 create index if not exists idx_player_characters_room_created on public.player_characters(room_id, created_at asc);
 create index if not exists idx_player_characters_user_room on public.player_characters(user_id, room_id);
 create index if not exists idx_messages_room_created on public.messages(room_id, created_at desc);
