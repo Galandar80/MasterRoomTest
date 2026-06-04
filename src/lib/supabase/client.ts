@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
+import { normalizeSupabaseUrl } from "@/lib/auth-config";
 
 let browserClient: SupabaseClient | null = null;
 
@@ -30,7 +31,3 @@ export const demoMode =
   process.env.NEXT_PUBLIC_DEMO_MODE === "true" ||
   !process.env.NEXT_PUBLIC_SUPABASE_URL ||
   !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-function normalizeSupabaseUrl(url?: string) {
-  return url?.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
-}

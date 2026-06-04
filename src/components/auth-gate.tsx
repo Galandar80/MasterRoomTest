@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { LogIn, Shield, UserPlus } from "lucide-react";
+import { getAuthRedirectUrl } from "@/lib/auth-config";
 import { createClient, demoMode } from "@/lib/supabase/client";
 
 type AuthGateProps = {
@@ -87,7 +88,7 @@ export function AuthGate({ children }: AuthGateProps) {
               email,
               password,
               options: {
-                emailRedirectTo: window.location.origin
+                emailRedirectTo: getAuthRedirectUrl(window.location.origin)
               }
             });
 
@@ -120,7 +121,7 @@ export function AuthGate({ children }: AuthGateProps) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin
+        redirectTo: getAuthRedirectUrl(window.location.origin)
       }
     });
 

@@ -28,6 +28,7 @@ Copia `.env.example` in `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 NEXT_PUBLIC_DEMO_MODE=false
+NEXT_PUBLIC_SITE_URL=https://your-vercel-domain.vercel.app
 ```
 
 Usa l'URL base del progetto Supabase, non l'endpoint REST. Quindi:
@@ -69,6 +70,7 @@ Bucket Storage creati dallo schema:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 NEXT_PUBLIC_DEMO_MODE=false
+NEXT_PUBLIC_SITE_URL=https://gdr-master-room.vercel.app
 ```
 
 7. Dopo il primo deploy copia il dominio Vercel, per esempio:
@@ -88,6 +90,14 @@ https://*.vercel.app/**
 ```
 
 `https://*.vercel.app/**` e utile per preview deploy; per produzione e meglio avere anche il dominio esatto.
+
+Se Google mostra `Errore 400: redirect_uri_mismatch`, apri questa pagina dopo il deploy:
+
+```text
+https://gdr-master-room.vercel.app/oauth-setup
+```
+
+La pagina mostra il callback Supabase esatto da copiare in Google Cloud Console e gli URL da copiare in Supabase.
 
 ## Auth Google
 
@@ -117,6 +127,7 @@ Per test rapidi con email/password puoi disattivare temporaneamente la conferma 
 
 - Non caricare mai `.env.local` su GitHub: Vercel deve ricevere le variabili dalla dashboard.
 - `NEXT_PUBLIC_SUPABASE_URL` deve essere l'URL base del progetto, non `/rest/v1`.
+- `NEXT_PUBLIC_SITE_URL` deve essere il dominio Vercel principale, senza slash finale. Questo rende stabile il redirect OAuth anche quando Vercel genera URL preview.
 - Il login Google continua a funzionare anche su Vercel solo se Supabase e Google Cloud hanno redirect e dominio di produzione configurati.
 - Se cambi progetto Supabase, riesegui `supabase/schema.sql` e poi eventuali file in `supabase/migrations`.
 
