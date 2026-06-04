@@ -1,0 +1,15 @@
+node_modules
+.next
+.turbo
+.env
+.env.local
+.env.*.local
+.vercel
+dist
+*.log
+tsconfig.tsbuildinfo
+Backup
+.agents
+.codex
+skills-lock.json
+Migliorie.txt

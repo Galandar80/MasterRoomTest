@@ -1,0 +1,871 @@
+"use client";
+
+import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { demoRoomState } from "@/lib/demo-data";
+import type {
+  AudioTrack,
+  Campaign,
+  Character,
+  DiceRequest,
+  InventoryItem,
+  MediaAsset,
+  Message,
+  Npc,
+  PlayerNote,
+  Profile,
+  Room,
+  RoomState,
+  Scene,
+  SoundEffect
+} from "@/lib/types";
+
+type DatabaseClient = SupabaseClient;
+const ROOM_MESSAGE_PAGE_SIZE = 150;
+
+export type AdminRoomOverview = {
+  id: string;
+  name: string;
+  invite_code: string;
+  max_players: number;
+  created_at: string;
+  campaign_id: string;
+  campaign_title?: string;
+  master_id?: string;
+  player_count?: number;
+};
+
+type RoomMessagePage = {
+  messages: Message[];
+  privateMessages: Message[];
+  offMessages: Message[];
+  hasOlderMessages: boolean;
+};
+
+export async function ensureProfile(supabase: DatabaseClient, user: User): Promise<Profile> {
+  const fallback = profileFromUser(user);
+  const email = fallback.email;
+  const username = fallback.username;
+
+  const { data: existing, error: selectError } = await supabase.from("users").select("*").eq("id", user.id).maybeSingle();
+
+  if (selectError) {
+    throw selectError;
+  }
+
+  if (existing) {
+    return existing as Profile;
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .insert({ id: user.id, email, username, role: "player" })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as Profile;
+}
+
+export function profileFromUser(user: User): Profile {
+  const email = user.email ?? "";
+  const username =
+    user.user_metadata?.full_name ??
+    user.user_metadata?.name ??
+    user.user_metadata?.username ??
+    email.split("@")[0] ??
+    "Giocatore";
+
+  return {
+    id: user.id,
+    email,
+    username,
+    role: "player"
+  };
+}
+
+export async function loadInitialRoomState(supabase: DatabaseClient, profile: Profile): Promise<RoomState | null> {
+  const { data: masterCampaign } = await supabase
+    .from("campaigns")
+    .select("*, rooms(*)")
+    .eq("master_id", profile.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const masterRoom = masterCampaign?.rooms?.[0];
+  if (masterCampaign && masterRoom) {
+    return loadRoomState(supabase, masterRoom.id, profile);
+  }
+
+  const { data: character } = await supabase
+    .from("player_characters")
+    .select("room_id")
+    .eq("user_id", profile.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (character?.room_id) {
+    return loadRoomState(supabase, character.room_id, profile);
+  }
+
+  return null;
+}
+
+export async function listAllRoomsForSuperAdmin(supabase: DatabaseClient, profile: Profile): Promise<AdminRoomOverview[]> {
+  if (!isSuperAdmin(profile)) {
+    throw new Error("Accesso superadmin non autorizzato.");
+  }
+
+  const { data, error } = await supabase
+    .from("rooms")
+    .select("id,name,invite_code,max_players,created_at,campaign_id,campaigns(title,master_id),player_characters(id)")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((room: any) => ({
+    id: room.id,
+    name: room.name,
+    invite_code: room.invite_code,
+    max_players: room.max_players ?? 4,
+    created_at: room.created_at,
+    campaign_id: room.campaign_id,
+    campaign_title: room.campaigns?.title,
+    master_id: room.campaigns?.master_id,
+    player_count: room.player_characters?.length ?? 0
+  }));
+}
+
+export async function updateRoomBySuperAdmin(
+  supabase: DatabaseClient,
+  profile: Profile,
+  roomId: string,
+  values: { name: string; inviteCode: string; maxPlayers: number }
+) {
+  if (!isSuperAdmin(profile)) {
+    throw new Error("Accesso superadmin non autorizzato.");
+  }
+
+  const { error } = await supabase
+    .from("rooms")
+    .update({ name: values.name, invite_code: values.inviteCode, max_players: values.maxPlayers })
+    .eq("id", roomId);
+
+  if (error) throw error;
+}
+
+export async function deleteRoomBySuperAdmin(supabase: DatabaseClient, profile: Profile, roomId: string) {
+  if (!isSuperAdmin(profile)) {
+    throw new Error("Accesso superadmin non autorizzato.");
+  }
+
+  const { error } = await supabase.from("rooms").delete().eq("id", roomId);
+  if (error) throw error;
+}
+
+export function isSuperAdmin(profile: Profile) {
+  return profile.email.toLowerCase() === "galandar@gmail.com";
+}
+
+export async function createGameInSupabase(
+  supabase: DatabaseClient,
+  profile: Profile,
+  values: {
+    campaignTitle: string;
+    genre: string;
+    description: string;
+    coverImageUrl: string;
+    roomName: string;
+    inviteCode: string;
+    maxPlayers: number;
+    sceneTitle: string;
+    sceneDescription: string;
+    sceneImageUrl: string;
+  }
+) {
+  await supabase.from("users").update({ role: "master" }).eq("id", profile.id);
+
+  const { data: campaign, error: campaignError } = await supabase
+    .from("campaigns")
+    .insert({
+      master_id: profile.id,
+      title: values.campaignTitle,
+      genre: values.genre,
+      description: values.description,
+      cover_image_url: values.coverImageUrl,
+      status: "active"
+    })
+    .select("*")
+    .single();
+
+  if (campaignError) throw campaignError;
+
+  const { data: room, error: roomError } = await supabase
+    .from("rooms")
+    .insert({
+      campaign_id: campaign.id,
+      name: values.roomName,
+      invite_code: values.inviteCode,
+      max_players: values.maxPlayers
+    })
+    .select("*")
+    .single();
+
+  if (roomError) throw roomError;
+
+  const { data: scene, error: sceneError } = await supabase
+    .from("scenes")
+    .insert({
+      room_id: room.id,
+      title: values.sceneTitle,
+      description: values.sceneDescription,
+      image_url: values.sceneImageUrl,
+      created_by: profile.id
+    })
+    .select("*")
+    .single();
+
+  if (sceneError) throw sceneError;
+
+  const { data: audio, error: audioError } = await supabase
+    .from("audio_tracks")
+    .insert({
+      room_id: room.id,
+      title: "Silenzio di scena",
+      audio_url: "",
+      loop: true
+    })
+    .select("*")
+    .single();
+
+  if (audioError) throw audioError;
+
+  const { error: updateError } = await supabase
+    .from("rooms")
+    .update({ current_scene_id: scene.id, current_audio_id: audio.id })
+    .eq("id", room.id);
+
+  if (updateError) throw updateError;
+
+  await supabase.from("npcs").insert([
+    {
+      room_id: room.id,
+      name: "Narratore Ombra",
+      color: "#84cc16",
+      description: "NPC temporaneo pronto per la prima sessione."
+    }
+  ]);
+
+  return loadRoomState(supabase, room.id, profile);
+}
+
+export async function enterMasterRoomByCode(supabase: DatabaseClient, code: string, profile: Profile) {
+  const { data: room, error } = await supabase
+    .from("rooms")
+    .select("*, campaigns!inner(master_id)")
+    .eq("invite_code", code.trim().toUpperCase())
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!room) return null;
+  if (room.campaigns?.master_id !== profile.id) {
+    throw new Error("Questo codice esiste, ma la stanza appartiene a un altro Master.");
+  }
+
+  return loadRoomState(supabase, room.id, { ...profile, role: "master" });
+}
+
+export async function joinRoomByCode(supabase: DatabaseClient, code: string, profile: Profile) {
+  const { data: room, error } = await supabase.from("rooms").select("*").eq("invite_code", code.trim().toUpperCase()).maybeSingle();
+
+  if (error) throw error;
+  if (!room) return null;
+
+  const { data: existingCharacter } = await supabase
+    .from("player_characters")
+    .select("*")
+    .eq("room_id", room.id)
+    .eq("user_id", profile.id)
+    .maybeSingle();
+
+  if (!existingCharacter) {
+    const { count, error: countError } = await supabase
+      .from("player_characters")
+      .select("id", { count: "exact", head: true })
+      .eq("room_id", room.id);
+
+    if (countError) throw countError;
+    if ((count ?? 0) >= (room.max_players ?? 4)) {
+      throw new Error("La stanza ha raggiunto il numero massimo di giocatori disponibili.");
+    }
+
+    await supabase.from("player_characters").insert({
+      room_id: room.id,
+      user_id: profile.id,
+      character_name: profile.username || "Nuovo",
+      character_surname: "Viandante",
+      portrait_url: demoRoomState.characters[0].portrait_url,
+      color: "#f59e0b",
+      hp: 10,
+      mental_state: "Stabile",
+      public_background: "Personaggio appena entrato nella stanza.",
+      visible_status: "stabile",
+      is_setup_complete: false
+    });
+  }
+
+  return loadRoomState(supabase, room.id, profile);
+}
+
+export async function createOrUpdateCharacter(
+  supabase: DatabaseClient,
+  roomId: string,
+  profile: Profile,
+  values: {
+    characterName: string;
+    characterSurname: string;
+    color: string;
+    portraitUrl: string;
+    hp: number;
+    mentalState: string;
+    visibleStatus: string;
+    publicBackground: string;
+    conditions?: string[];
+  }
+) {
+  const { data, error } = await supabase
+    .from("player_characters")
+    .upsert(
+      {
+        room_id: roomId,
+        user_id: profile.id,
+        character_name: values.characterName,
+        character_surname: values.characterSurname,
+        portrait_url: values.portraitUrl,
+        color: values.color,
+        hp: values.hp,
+        mental_state: values.mentalState,
+        visible_status: values.visibleStatus,
+        public_background: values.publicBackground,
+        conditions: values.conditions ?? [],
+        is_setup_complete: true
+      },
+      { onConflict: "room_id,user_id" }
+    )
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as Character;
+}
+
+export async function loadRoomState(supabase: DatabaseClient, roomId: string, profile: Profile): Promise<RoomState> {
+  const { data: room, error: roomError } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+  if (roomError) throw roomError;
+
+  const [
+    { data: campaign },
+    { data: scenes },
+    { data: characters },
+    { data: npcs },
+    { data: audioTracks },
+    { data: soundEffects },
+    { data: mediaAssets },
+    { data: presence },
+    messagePage,
+    { data: diceRequests }
+  ] =
+    await Promise.all([
+      supabase.from("campaigns").select("*").eq("id", room.campaign_id).single(),
+      supabase.from("scenes").select("*").eq("room_id", room.id).order("created_at", { ascending: false }),
+      supabase.from("player_characters").select("*").eq("room_id", room.id).order("created_at", { ascending: true }),
+      supabase.from("npcs").select("*").eq("room_id", room.id).order("created_at", { ascending: true }),
+      supabase.from("audio_tracks").select("*").eq("room_id", room.id).order("created_at", { ascending: true }),
+      supabase.from("sound_effects").select("*").eq("room_id", room.id).order("created_at", { ascending: true }),
+      supabase.from("media_assets").select("*").eq("room_id", room.id).order("created_at", { ascending: false }),
+      supabase.from("room_presence").select("*").eq("room_id", room.id),
+      fetchRoomMessagePage(supabase, room.id, undefined, ROOM_MESSAGE_PAGE_SIZE),
+      supabase.from("dice_requests").select("*").eq("room_id", room.id).order("created_at", { ascending: false })
+    ]);
+
+  const campaignRecord = campaign as Campaign;
+  const isMaster = campaignRecord.master_id === profile.id;
+  const sceneListAll = (scenes ?? []) as Scene[];
+  const sceneList = isMaster
+    ? sceneListAll
+    : sceneListAll.filter((scene) => (scene.visibility ?? "public") === "public" || (scene.visible_user_ids ?? []).includes(profile.id));
+  const audioList = (audioTracks ?? []) as AudioTrack[];
+  const characterList = (characters ?? []) as Character[];
+  const currentScene =
+    sceneList.find((scene) => scene.id === room.current_scene_id) ??
+    sceneList.find((scene) => (scene.visibility ?? "public") === "public") ??
+    sceneList[0] ??
+    demoRoomState.scene;
+  const currentCharacter = characterList.find((character) => character.user_id === profile.id) ?? characterList[0];
+  const characterIds = characterList.map((character) => character.id);
+
+  const [{ data: inventory }, { data: notes }] = currentCharacter
+    ? await Promise.all([
+        isMaster && characterIds.length
+          ? supabase.from("inventory_items").select("*").in("character_id", characterIds).order("created_at", { ascending: true })
+          : supabase.from("inventory_items").select("*").eq("character_id", currentCharacter.id).order("created_at", { ascending: true }),
+        supabase.from("player_notes").select("*").eq("character_id", currentCharacter.id).order("updated_at", { ascending: false })
+      ])
+    : [{ data: [] }, { data: [] }];
+
+  const sessionProfile: Profile = {
+    ...profile,
+    role: isMaster ? "master" : "player"
+  };
+
+  return {
+    profile: sessionProfile,
+    campaigns: [campaignRecord],
+    room: room as Room,
+    scene: currentScene,
+    scenes: sceneList,
+    characters: characterList,
+    npcs: (npcs ?? []) as Npc[],
+    messages: messagePage.messages,
+    privateMessages: messagePage.privateMessages,
+    offMessages: messagePage.offMessages,
+    diceRequests: (diceRequests ?? []) as DiceRequest[],
+    audioTracks: audioList.length ? audioList : demoRoomState.audioTracks,
+    soundEffects: (soundEffects ?? []) as SoundEffect[],
+    mediaAssets: (mediaAssets ?? []) as MediaAsset[],
+    presence: presence ?? [],
+    typing: [],
+    inventory: (inventory ?? []) as InventoryItem[],
+    notes: (notes ?? []) as PlayerNote[],
+    hasOlderMessages: messagePage.hasOlderMessages
+  };
+}
+
+async function fetchRoomMessagePage(supabase: DatabaseClient, roomId: string, beforeCreatedAt?: string, limit = ROOM_MESSAGE_PAGE_SIZE): Promise<RoomMessagePage> {
+  let query = supabase.from("messages").select("*").eq("room_id", roomId).order("created_at", { ascending: false }).limit(limit + 1);
+
+  if (beforeCreatedAt) {
+    query = query.lt("created_at", beforeCreatedAt);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const ordered = ((data ?? []) as Message[]).slice(0, limit).reverse();
+  return splitMessagePage(ordered, (data?.length ?? 0) > limit);
+}
+
+function splitMessagePage(allMessages: Message[], hasOlderMessages: boolean): RoomMessagePage {
+  return {
+    messages: allMessages.filter((message) => !message.is_private && (message.channel ?? "gdr") === "gdr"),
+    privateMessages: allMessages.filter((message) => message.is_private),
+    offMessages: allMessages.filter((message) => !message.is_private && message.channel === "off"),
+    hasOlderMessages
+  };
+}
+
+export async function loadOlderRoomMessages(supabase: DatabaseClient, roomId: string, beforeCreatedAt: string, limit = ROOM_MESSAGE_PAGE_SIZE) {
+  return fetchRoomMessagePage(supabase, roomId, beforeCreatedAt, limit);
+}
+
+export async function exportRoomMessages(supabase: DatabaseClient, roomId: string) {
+  const { data, error } = await supabase.from("messages").select("*").eq("room_id", roomId).order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Message[];
+}
+
+export async function createScene(
+  supabase: DatabaseClient,
+  roomId: string,
+  profile: Profile,
+  values: {
+    title: string;
+    description: string;
+    imageUrl: string;
+    mediaType?: "image" | "video";
+    videoUrl?: string;
+    loopVideo?: boolean;
+    visibility?: "public" | "private";
+    visibleUserIds?: string[];
+  }
+) {
+  const { data, error } = await supabase
+    .from("scenes")
+    .insert({
+      room_id: roomId,
+      title: values.title,
+      description: values.description,
+      image_url: values.imageUrl,
+      media_type: values.mediaType ?? "image",
+      video_url: values.videoUrl || null,
+      loop_video: values.loopVideo ?? true,
+      visibility: values.visibility ?? "public",
+      visible_user_ids: values.visibleUserIds ?? [],
+      created_by: profile.id
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as Scene;
+}
+
+export async function createSoundEffect(
+  supabase: DatabaseClient,
+  roomId: string,
+  values: { title: string; audioUrl: string; loop: boolean }
+) {
+  const { data, error } = await supabase
+    .from("sound_effects")
+    .insert({
+      room_id: roomId,
+      title: values.title,
+      audio_url: values.audioUrl,
+      loop: values.loop
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as SoundEffect;
+}
+
+export async function createAudioTrack(
+  supabase: DatabaseClient,
+  roomId: string,
+  values: { title: string; audioUrl: string; loop: boolean }
+) {
+  const { data, error } = await supabase
+    .from("audio_tracks")
+    .insert({
+      room_id: roomId,
+      title: values.title,
+      audio_url: values.audioUrl,
+      loop: values.loop
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as AudioTrack;
+}
+
+export async function createNpc(
+  supabase: DatabaseClient,
+  roomId: string,
+  values: { name: string; color: string; description: string; portraitUrl?: string }
+) {
+  const { data, error } = await supabase
+    .from("npcs")
+    .insert({
+      room_id: roomId,
+      name: values.name,
+      color: values.color,
+      description: values.description,
+      portrait_url: values.portraitUrl || null
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as Npc;
+}
+
+export async function deleteNpc(supabase: DatabaseClient, npc: Npc) {
+  await removePublicFileFromUrl(supabase, "portraits", npc.portrait_url ?? "");
+
+  const { error } = await supabase.from("npcs").delete().eq("id", npc.id);
+  if (error) throw error;
+}
+
+export async function createInventoryItem(
+  supabase: DatabaseClient,
+  characterId: string,
+  values: { name: string; description: string; quantity: number; isPublic: boolean; masterNotes?: string }
+) {
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .insert({
+      character_id: characterId,
+      name: values.name,
+      description: values.description,
+      quantity: values.quantity,
+      is_public: values.isPublic,
+      master_notes: values.masterNotes || null
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as InventoryItem;
+}
+
+export async function deleteInventoryItem(supabase: DatabaseClient, item: InventoryItem) {
+  const { error } = await supabase.from("inventory_items").delete().eq("id", item.id);
+  if (error) throw error;
+}
+
+export async function deleteAudioTrack(supabase: DatabaseClient, track: AudioTrack) {
+  await removePublicFileFromUrl(supabase, "audio-tracks", track.audio_url);
+
+  const { error } = await supabase.from("audio_tracks").delete().eq("id", track.id);
+  if (error) throw error;
+}
+
+export async function deleteSoundEffect(supabase: DatabaseClient, effect: SoundEffect) {
+  await removePublicFileFromUrl(supabase, "audio-tracks", effect.audio_url);
+
+  const { error } = await supabase.from("sound_effects").delete().eq("id", effect.id);
+  if (error) throw error;
+}
+
+export async function uploadPublicFile(supabase: DatabaseClient, bucket: string, file: File, folder: string) {
+  const extension = file.name.split(".").pop() || "bin";
+  const path = `${folder}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export async function deleteScene(supabase: DatabaseClient, scene: Scene) {
+  await removePublicFileFromUrl(supabase, "scene-images", scene.image_url);
+  await removePublicFileFromUrl(supabase, "scene-images", scene.video_url ?? "");
+
+  const { error } = await supabase.from("scenes").delete().eq("id", scene.id);
+  if (error) throw error;
+}
+
+export async function deleteRoom(supabase: DatabaseClient, roomId: string) {
+  const { error } = await supabase.from("rooms").delete().eq("id", roomId);
+  if (error) throw error;
+}
+
+export async function insertMessage(supabase: DatabaseClient, message: Omit<Message, "id" | "created_at">) {
+  const { data, error } = await supabase.from("messages").insert(message).select("*").single();
+  if (error) throw error;
+  return data as Message;
+}
+
+export async function deleteMessage(supabase: DatabaseClient, messageId: string) {
+  const { error } = await supabase.from("messages").delete().eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function updateMessageContent(supabase: DatabaseClient, messageId: string, content: string) {
+  const { data, error } = await supabase
+    .from("messages")
+    .update({ content, edited_at: new Date().toISOString() })
+    .eq("id", messageId)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as Message;
+}
+
+export async function updateMessagePinned(supabase: DatabaseClient, messageId: string, isPinned: boolean) {
+  const { data, error } = await supabase
+    .from("messages")
+    .update({ is_pinned: isPinned })
+    .eq("id", messageId)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as Message;
+}
+
+export async function createMediaAsset(
+  supabase: DatabaseClient,
+  roomId: string,
+  profile: Profile,
+  values: { title: string; assetType: MediaAsset["asset_type"]; url: string; tags: string[] }
+) {
+  const { data, error } = await supabase
+    .from("media_assets")
+    .insert({
+      room_id: roomId,
+      title: values.title,
+      asset_type: values.assetType,
+      url: values.url,
+      tags: values.tags,
+      created_by: profile.id
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as MediaAsset;
+}
+
+export async function deleteMediaAsset(supabase: DatabaseClient, asset: MediaAsset) {
+  await removePublicFileFromUrl(supabase, "scene-images", asset.url);
+  await removePublicFileFromUrl(supabase, "audio-tracks", asset.url);
+  await removePublicFileFromUrl(supabase, "portraits", asset.url);
+
+  const { error } = await supabase.from("media_assets").delete().eq("id", asset.id);
+  if (error) throw error;
+}
+
+export async function upsertPresence(supabase: DatabaseClient, roomId: string, profile: Profile, displayName: string) {
+  const { error } = await supabase.from("room_presence").upsert(
+    {
+      room_id: roomId,
+      user_id: profile.id,
+      display_name: displayName,
+      role: profile.role,
+      last_seen_at: new Date().toISOString()
+    },
+    { onConflict: "room_id,user_id" }
+  );
+
+  if (error) throw error;
+}
+
+export async function removePresence(supabase: DatabaseClient, roomId: string, userId: string) {
+  const { error } = await supabase.from("room_presence").delete().eq("room_id", roomId).eq("user_id", userId);
+  if (error) throw error;
+}
+
+export async function createPlayerNote(supabase: DatabaseClient, characterId: string, values: { title: string; content: string }) {
+  const { data, error } = await supabase
+    .from("player_notes")
+    .insert({ character_id: characterId, title: values.title, content: values.content })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as PlayerNote;
+}
+
+export async function createDiceRequest(
+  supabase: DatabaseClient,
+  roomId: string,
+  profile: Profile,
+  values: { diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }
+) {
+  const { data, error } = await supabase
+    .from("dice_requests")
+    .insert({
+      room_id: roomId,
+      requested_by: profile.id,
+      dice_sides: values.diceSides,
+      reason: values.reason,
+      target_user_id: values.targetUserId || null,
+      visibility: values.visibility
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as DiceRequest;
+}
+
+export async function rollDiceRequest(supabase: DatabaseClient, request: DiceRequest, result: number) {
+  const { data, error } = await supabase
+    .from("dice_requests")
+    .update({ status: "rolled", result, rolled_at: new Date().toISOString() })
+    .eq("id", request.id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as DiceRequest;
+}
+
+export async function updateCurrentScene(supabase: DatabaseClient, roomId: string, sceneId: string) {
+  const { error } = await supabase.from("rooms").update({ current_scene_id: sceneId }).eq("id", roomId);
+  if (error) throw error;
+}
+
+export async function updateCurrentAudio(supabase: DatabaseClient, roomId: string, audioId: string) {
+  const { error } = await supabase.from("rooms").update({ current_audio_id: audioId }).eq("id", roomId);
+  if (error) throw error;
+}
+
+export async function triggerRoomSoundEffect(supabase: DatabaseClient, roomId: string, effectId: string | null) {
+  const { error } = await supabase
+    .from("rooms")
+    .update({ current_sound_effect_id: effectId, sound_effect_started_at: new Date().toISOString() })
+    .eq("id", roomId);
+
+  if (error) throw error;
+}
+
+export async function updateRoomChatPermissions(supabase: DatabaseClient, roomId: string, values: { chatEnabled: boolean; mutedUserIds: string[] }) {
+  const { error } = await supabase
+    .from("rooms")
+    .update({ chat_enabled: values.chatEnabled, muted_user_ids: values.mutedUserIds })
+    .eq("id", roomId);
+
+  if (error) throw error;
+}
+
+export async function updateRoomSpotlight(
+  supabase: DatabaseClient,
+  roomId: string,
+  values: { npcId: string | null; visibility: "off" | "public" | "private"; userIds: string[] }
+) {
+  const { error } = await supabase
+    .from("rooms")
+    .update({ spotlight_npc_id: values.npcId, spotlight_visibility: values.visibility, spotlight_user_ids: values.userIds })
+    .eq("id", roomId);
+
+  if (error) throw error;
+}
+
+export async function updateCharacterByMaster(
+  supabase: DatabaseClient,
+  characterId: string,
+  values: {
+    characterName: string;
+    characterSurname: string;
+    portraitUrl: string;
+    color: string;
+    hp: number;
+    mentalState: string;
+    visibleStatus: string;
+    publicBackground: string;
+    conditions?: string[];
+  }
+) {
+  const { data, error } = await supabase
+    .from("player_characters")
+    .update({
+      character_name: values.characterName,
+      character_surname: values.characterSurname,
+      portrait_url: values.portraitUrl,
+      color: values.color,
+      hp: values.hp,
+      mental_state: values.mentalState,
+      visible_status: values.visibleStatus,
+      public_background: values.publicBackground,
+      conditions: values.conditions ?? []
+    })
+    .eq("id", characterId)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as Character;
+}
+
+async function removePublicFileFromUrl(supabase: DatabaseClient, bucket: string, publicUrl: string) {
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const markerIndex = publicUrl.indexOf(marker);
+
+  if (markerIndex === -1) return;
+
+  const path = decodeURIComponent(publicUrl.slice(markerIndex + marker.length).split("?")[0] ?? "");
+  if (!path) return;
+
+  const { error } = await supabase.storage.from(bucket).remove([path]);
+  if (error) throw error;
+}

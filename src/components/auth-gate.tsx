@@ -1,0 +1,285 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { LogIn, Shield, UserPlus } from "lucide-react";
+import { createClient, demoMode } from "@/lib/supabase/client";
+
+type AuthGateProps = {
+  children: React.ReactNode;
+};
+
+export function AuthGate({ children }: AuthGateProps) {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState(demoMode ? "master@example.com" : "");
+  const [password, setPassword] = useState(demoMode ? "demo-master-room" : "");
+  const [isAuthed, setIsAuthed] = useState(demoMode);
+  const [message, setMessage] = useState(demoMode ? "Modalita demo attiva" : "");
+  const [isBusy, setIsBusy] = useState(false);
+  const supabase = createClient();
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    async function initializeAuth() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const urlError = params.get("error_description") ?? params.get("error");
+
+      if (urlError) {
+        setMessage(readAuthError(urlError));
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      if (code) {
+        setIsBusy(true);
+        setMessage("Completamento accesso Google...");
+        const { data, error } = await supabase!.auth.exchangeCodeForSession(code);
+
+        if (error) {
+          setMessage(readAuthError(error.message));
+        } else {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          if (data.session?.user) {
+            setIsAuthed(true);
+            setIsBusy(false);
+            return;
+          }
+        }
+        setIsBusy(false);
+      }
+
+      const { data } = await supabase!.auth.getSession();
+      setIsAuthed(Boolean(data.session));
+
+      if (code && !data.session) {
+        setMessage("Google ha risposto, ma Supabase non ha creato una sessione locale. Controlla Site URL e Redirect URLs in Supabase.");
+      }
+    }
+
+    initializeAuth();
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setIsAuthed(Boolean(session));
+      setIsBusy(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  async function handleAuth(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsBusy(true);
+    setMessage("");
+
+    if (!supabase) {
+      setIsAuthed(true);
+      setIsBusy(false);
+      return;
+    }
+
+    try {
+      const action =
+        mode === "login"
+          ? signInWithPasswordViaRest(email, password)
+          : supabase.auth.signUp({
+              email,
+              password,
+              options: {
+                emailRedirectTo: window.location.origin
+              }
+            });
+
+      const { data, error } = await action;
+
+      if (error) {
+        setMessage(readAuthError(error.message));
+        return;
+      }
+
+      if (data.user) {
+        setIsAuthed(true);
+      }
+
+      setMessage(mode === "login" ? "Accesso effettuato" : "Registrazione avviata. Controlla la mail di conferma.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleGoogleAuth() {
+    if (!supabase) {
+      setIsAuthed(true);
+      return;
+    }
+
+    setIsBusy(true);
+    setMessage("");
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+
+    if (error) {
+      setMessage(readAuthError(error.message));
+      setIsBusy(false);
+    }
+  }
+
+  async function signInWithPasswordViaRest(loginEmail: string, loginPassword: string) {
+    if (!supabase) {
+      return { data: { user: null }, error: null };
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !anonKey) {
+      return { data: { user: null }, error: new Error("Variabili Supabase mancanti") };
+    }
+
+    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email: loginEmail, password: loginPassword })
+    });
+
+    const payload = await response.json();
+
+    if (!response.ok) {
+      return { data: { user: null }, error: new Error(payload.msg ?? payload.message ?? "Accesso non riuscito") };
+    }
+
+    const { error } = await supabase.auth.setSession({
+      access_token: payload.access_token,
+      refresh_token: payload.refresh_token
+    });
+
+    if (error) {
+      return { data: { user: null }, error };
+    }
+
+    return { data: { user: payload.user }, error: null };
+  }
+
+  if (isAuthed) {
+    return <>{children}</>;
+  }
+
+  return (
+    <section className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-6xl items-center justify-center">
+      <div className="grid w-full overflow-hidden rounded-lg border border-ember-400/20 bg-ink-800/90 shadow-glow md:grid-cols-[1.05fr_0.95fr]">
+        <div className="relative min-h-[32rem] bg-[url('https://images.unsplash.com/photo-1518709268805-4e9042af2176?auto=format&fit=crop&w=1400&q=80')] bg-cover bg-center">
+          <div className="absolute inset-0 bg-gradient-to-r from-ink-900/60 via-ink-900/20 to-ink-900/85" />
+          <div className="absolute inset-x-0 bottom-0 p-8">
+            <p className="mb-3 text-sm uppercase tracking-[0.22em] text-ember-200">GDR Master Room</p>
+            <h1 className="max-w-xl text-4xl font-semibold leading-tight text-white sm:text-5xl">
+              Una stanza narrativa condivisa per campagne online e ibride.
+            </h1>
+            <p className="mt-4 max-w-lg text-base leading-7 text-slate-200">
+              Scene, chat, NPC, sussurri privati, portrait, inventari e audio ambientale in un solo tavolo digitale.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleAuth} className="flex flex-col justify-center gap-5 p-6 sm:p-8">
+          <div>
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg border border-brass/30 bg-brass/10 text-brass">
+              <Shield size={22} />
+            </div>
+            <h2 className="text-2xl font-semibold text-white">
+              {mode === "login" ? "Entra nella stanza" : "Crea il tuo accesso"}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-300">
+              Con Supabase configurato userai Auth reale. Senza variabili ambiente, l&apos;app parte in demo locale.
+            </p>
+          </div>
+
+          <label className="space-y-2 text-sm text-slate-200">
+            Email
+            <input className="field px-3 py-3" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </label>
+
+          <label className="space-y-2 text-sm text-slate-200">
+            Password
+            <input
+              className="field px-3 py-3"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={isBusy}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-ember-500 px-4 py-3 font-semibold text-ink-900 transition hover:bg-ember-400"
+          >
+            {mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
+            {isBusy ? "Attendi..." : mode === "login" ? "Accedi" : "Registrati"}
+          </button>
+
+          <div className="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+            <span className="h-px flex-1 bg-white/10" />
+            oppure
+            <span className="h-px flex-1 bg-white/10" />
+          </div>
+
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={handleGoogleAuth}
+            className="inline-flex items-center justify-center gap-3 rounded-lg border border-white/10 bg-white px-4 py-3 font-semibold text-ink-900 transition hover:bg-slate-100 disabled:opacity-70"
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink-900 text-xs font-bold text-white">G</span>
+            Continua con Google
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode(mode === "login" ? "register" : "login")}
+            className="text-left text-sm text-ember-200 hover:text-white"
+          >
+            {mode === "login" ? "Non hai un account? Registrati" : "Hai gia un account? Accedi"}
+          </button>
+
+          {message ? <p className="rounded-lg border border-brass/20 bg-brass/10 px-3 py-2 text-sm text-brass">{message}</p> : null}
+        </form>
+      </div>
+    </section>
+  );
+}
+
+function readAuthError(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("email rate limit exceeded") || normalized.includes("rate limit")) {
+    return "Limite email Supabase raggiunto: attendi qualche minuto, disattiva temporaneamente la conferma email oppure configura un SMTP personalizzato in Supabase.";
+  }
+
+  if (message.includes("Invalid login credentials")) {
+    return "Credenziali non valide. Se non hai ancora un account, passa a Registrati.";
+  }
+
+  if (message.includes("Email not confirmed")) {
+    return "Email non confermata. Controlla la posta oppure disattiva temporaneamente la conferma email in Supabase per i test.";
+  }
+
+  if (message.includes("User already registered")) {
+    return "Questo account esiste gia. Passa ad Accedi oppure usa Google.";
+  }
+
+  if (normalized.includes("provider is not enabled") || normalized.includes("unsupported provider")) {
+    return "Provider Google non abilitato in Supabase. Vai in Authentication > Providers > Google e inserisci Client ID e Client Secret.";
+  }
+
+  return message;
+}
