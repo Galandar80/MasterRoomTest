@@ -3,14 +3,16 @@
 import { Dice5, Eye, Send, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Character, DiceRequest, Npc, Room } from "@/lib/types";
+import { getDiceCount, stripDiceCountMarker } from "@/lib/game-random";
 
 export function DiceRequestPanel({
   characters,
   onCreate
 }: {
   characters: Character[];
-  onCreate: (values: { diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void;
+  onCreate: (values: { diceCount: number; diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void;
 }) {
+  const [diceCount, setDiceCount] = useState(1);
   const [diceSides, setDiceSides] = useState(20);
   const [reason, setReason] = useState("");
   const [targetUserId, setTargetUserId] = useState("");
@@ -25,11 +27,20 @@ export function DiceRequestPanel({
         className="mt-4 grid gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          onCreate({ diceSides, reason: reason.trim(), targetUserId: targetUserId || null, visibility });
+          onCreate({ diceCount, diceSides, reason: reason.trim(), targetUserId: targetUserId || null, visibility });
           setReason("");
         }}
       >
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-[7rem_1fr_1fr_1fr]">
+          <input
+            className="field px-3 py-2 text-sm"
+            aria-label="Numero dadi"
+            type="number"
+            min="1"
+            max="20"
+            value={diceCount}
+            onChange={(event) => setDiceCount(Math.max(1, Number(event.target.value)))}
+          />
           <select className="field px-3 py-2 text-sm" value={diceSides} onChange={(event) => setDiceSides(Number(event.target.value))}>
             {[4, 6, 8, 10, 12, 20, 100].map((sides) => (
               <option key={sides} value={sides}>d{sides}</option>
@@ -68,8 +79,8 @@ export function PlayerDicePanel({ requests, onRoll }: { requests: DiceRequest[];
         {pending.map((request) => (
           <article key={request.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
             <div>
-              <p className="text-sm font-semibold text-white">Tira d{request.dice_sides}</p>
-              <p className="text-xs text-slate-400">{request.reason || "Tiro richiesto dal Master"}</p>
+              <p className="text-sm font-semibold text-white">Tira {getDiceCount(request)}d{request.dice_sides}</p>
+              <p className="text-xs text-slate-400">{stripDiceCountMarker(request.reason) || "Tiro richiesto dal Master"}</p>
             </div>
             <button type="button" onClick={() => onRoll(request)} className="rounded-lg bg-ember-500 px-3 py-2 text-sm font-semibold text-ink-900 hover:bg-ember-400">
               Tira

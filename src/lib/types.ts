@@ -5,8 +5,11 @@ export type MessageChannel = "gdr" | "off";
 export type SpotlightVisibility = "off" | "public" | "private";
 export type SceneMediaType = "image" | "video";
 export type SceneVisibility = "public" | "private";
-export type MediaAssetType = "image" | "video" | "audio" | "sound" | "portrait" | "object";
+export type MediaAssetType = "image" | "video" | "audio" | "sound" | "portrait" | "object" | "map";
 export type ChatFilter = "all" | "master" | "npc" | "player" | "off" | "dice" | "pinned";
+export type MapLevelType = "world" | "region" | "city" | "district" | "building" | "floor" | "room" | "custom";
+export type MapMarkerType = "mission" | "place" | "object" | "danger" | "event" | "portal" | "clue" | "custom";
+export type MapHotspotType = "map" | "scene" | "image" | "text" | "npc" | "object" | "event" | "audio" | "reveal";
 
 export type Profile = {
   id: string;
@@ -143,6 +146,7 @@ export type DiceRequest = {
   room_id: string;
   requested_by: string;
   target_user_id?: string | null;
+  dice_count?: number;
   dice_sides: number;
   reason: string;
   visibility: "public" | "private";
@@ -180,6 +184,105 @@ export type MediaAsset = {
   created_at: string;
 };
 
+export type NarrativeMap = {
+  id: string;
+  campaign_id?: string | null;
+  room_id: string;
+  parent_map_id?: string | null;
+  title: string;
+  description: string;
+  image_url: string;
+  level_type: MapLevelType;
+  is_active: boolean;
+  is_visible_to_players: boolean;
+  created_by?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type MapHotspot = {
+  id: string;
+  map_id: string;
+  title: string;
+  description: string;
+  type: MapHotspotType;
+  icon: string;
+  color: string;
+  x: number;
+  y: number;
+  target_map_id?: string | null;
+  target_scene_id?: string | null;
+  target_audio_id?: string | null;
+  target_event_id?: string | null;
+  is_visible_to_players: boolean;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type MapCharacterPosition = {
+  id: string;
+  map_id: string;
+  character_id: string;
+  x: number;
+  y: number;
+  narrative_location: string;
+  is_visible_to_players: boolean;
+  is_locked: boolean;
+  updated_at: string;
+};
+
+export type MapNpcMarker = {
+  id: string;
+  map_id: string;
+  npc_id: string;
+  x: number;
+  y: number;
+  is_visible_to_players: boolean;
+  status: string;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type MapCustomMarker = {
+  id: string;
+  map_id: string;
+  title: string;
+  description: string;
+  type: MapMarkerType;
+  icon: string;
+  color: string;
+  x: number;
+  y: number;
+  is_visible_to_players: boolean;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type MapFogArea = {
+  id: string;
+  map_id: string;
+  shape_type: "rect" | "circle" | "polygon";
+  shape_data: Record<string, unknown>;
+  is_revealed: boolean;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type MapEvent = {
+  id: string;
+  map_id: string;
+  title: string;
+  description: string;
+  type: string;
+  trigger_type: "manual" | "hotspot" | "zone";
+  target_scene_id?: string | null;
+  target_audio_id?: string | null;
+  payload?: Record<string, unknown>;
+  is_visible_to_players: boolean;
+  created_at: string;
+  updated_at?: string | null;
+};
+
 export type ActionLogEntry = {
   id: string;
   label: string;
@@ -206,5 +309,12 @@ export type RoomState = {
   typing: RoomTyping[];
   inventory: InventoryItem[];
   notes: PlayerNote[];
+  maps: NarrativeMap[];
+  mapHotspots: MapHotspot[];
+  mapCharacterPositions: MapCharacterPosition[];
+  mapNpcMarkers: MapNpcMarker[];
+  mapCustomMarkers: MapCustomMarker[];
+  mapFogAreas: MapFogArea[];
+  mapEvents: MapEvent[];
   hasOlderMessages?: boolean;
 };

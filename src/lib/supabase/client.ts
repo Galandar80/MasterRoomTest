@@ -18,7 +18,7 @@ export function createClient() {
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        flowType: "implicit",
+        flowType: "pkce",
         persistSession: true
       }
     });

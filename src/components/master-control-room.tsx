@@ -1,15 +1,17 @@
 "use client";
 
-import { Activity, ArrowLeft, AudioLines, Bell, Eye, Film, ImageUp, Library, MessageSquareText, Plus, Radio, Save, ScrollText, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, X } from "lucide-react";
+import { Activity, ArrowLeft, AudioLines, Bell, Eye, Film, ImageUp, Library, MapPinned, MessageSquareText, Plus, Radio, Save, ScrollText, Send, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, X } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
-import type { AudioTrack, InventoryItem, MediaAsset, Message, Npc, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
+import type { AudioTrack, InventoryItem, MapCharacterPosition, MediaAsset, Message, NarrativeMap, Npc, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
 import { AudioPlayer } from "@/components/room/audio-player";
 import { ChatPanel } from "@/components/room/chat-panel";
 import { SceneStage } from "@/components/room/scene-stage";
 import { SoundEffectPlayer } from "@/components/room/sound-effect-player";
 import { ExportChatButton, OffChatPanel, PrivateThreadsPanel } from "@/components/room/social-panels";
 import { DiceRequestPanel, SpotlightManager, SpotlightPanel } from "@/components/room/dice-and-spotlight";
+import { MapToolPanel } from "@/components/room/map-tool-panel";
+import type { CardDeckType } from "@/lib/game-random";
 import { shortTime } from "@/lib/utils";
 
 type MasterControlRoomProps = {
@@ -53,7 +55,8 @@ type MasterControlRoomProps = {
   onCreateInventoryItem: (characterId: string, values: { name: string; description: string; quantity: number; imageUrl: string; isPublic: boolean; masterNotes: string }) => void | Promise<void>;
   onDeleteInventoryItem: (item: InventoryItem) => void | Promise<void>;
   onUpdateChatPermissions: (values: { chatEnabled: boolean; mutedUserIds: string[] }) => void | Promise<void>;
-  onCreateDiceRequest: (values: { diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void | Promise<void>;
+  onCreateDiceRequest: (values: { diceCount?: number; diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void | Promise<void>;
+  onDrawCard: (values: { deck: CardDeckType; targetUserId?: string | null; visibility: "public" | "private"; reason: string }) => void | Promise<void>;
   onUpdateSpotlight: (values: { npcId: string | null; visibility: "off" | "public" | "private"; userIds: string[] }) => void | Promise<void>;
   onUpdateCharacter: (
     characterId: string,
@@ -61,6 +64,11 @@ type MasterControlRoomProps = {
   ) => void | Promise<void>;
   onCreateMediaAsset: (values: { title: string; assetType: MediaAsset["asset_type"]; url: string; tags: string[]; file?: File }) => void | Promise<void>;
   onDeleteMediaAsset: (asset: MediaAsset) => void | Promise<void>;
+  onCreateMap: (values: { title: string; description: string; imageUrl: string; imageFile?: File; parentMapId?: string | null; levelType: NarrativeMap["level_type"]; isVisibleToPlayers: boolean }) => void | Promise<void>;
+  onSetActiveMap: (map: NarrativeMap) => void | Promise<void>;
+  onDeleteMap: (map: NarrativeMap) => void | Promise<void>;
+  onDuplicateMap: (map: NarrativeMap) => void | Promise<void>;
+  onUpdateMapCharacterPosition: (position: MapCharacterPosition, values: { x: number; y: number; narrativeLocation: string; isVisibleToPlayers: boolean; isLocked: boolean }) => void | Promise<void>;
   onLoadOlderMessages: () => void;
   onExportMessages: () => Promise<Message[]>;
   actionLog: { id: string; label: string; detail?: string; created_at: string }[];
@@ -68,7 +76,7 @@ type MasterControlRoomProps = {
   onDeleteRoom: () => void;
 };
 
-type ControlTool = "preview" | "scenes" | "chat" | "players" | "audio" | "media" | "inventory";
+type ControlTool = "preview" | "scenes" | "map" | "chat" | "players" | "audio" | "media" | "inventory";
 
 export function MasterControlRoom({
   state,
@@ -100,10 +108,16 @@ export function MasterControlRoom({
   onDeleteInventoryItem,
   onUpdateChatPermissions,
   onCreateDiceRequest,
+  onDrawCard,
   onUpdateSpotlight,
   onUpdateCharacter,
   onCreateMediaAsset,
   onDeleteMediaAsset,
+  onCreateMap,
+  onSetActiveMap,
+  onDeleteMap,
+  onDuplicateMap,
+  onUpdateMapCharacterPosition,
   onLoadOlderMessages,
   onExportMessages,
   actionLog,
@@ -176,6 +190,7 @@ export function MasterControlRoom({
           <p className="px-3 pb-3 font-serif text-xs uppercase tracking-[0.28em] text-brass/80">Strumenti</p>
           <ControlLink icon={<Eye size={16} />} label="Panoramica" active={activeTool === "preview"} onClick={() => setActiveTool("preview")} />
           <ControlLink icon={<ImageUp size={16} />} label="Scene" active={activeTool === "scenes"} onClick={() => setActiveTool("scenes")} />
+          <ControlLink icon={<MapPinned size={16} />} label="Mappa" active={activeTool === "map"} onClick={() => setActiveTool("map")} />
           <ControlLink icon={<MessageSquareText size={16} />} label="Chat e NPC" active={activeTool === "chat"} onClick={() => setActiveTool("chat")} />
           <ControlLink icon={<UsersRound size={16} />} label="Giocatori" active={activeTool === "players"} onClick={() => setActiveTool("players")} />
           <ControlLink icon={<AudioLines size={16} />} label="Audio" active={activeTool === "audio"} onClick={() => setActiveTool("audio")} />
@@ -218,6 +233,18 @@ export function MasterControlRoom({
 
           {activeTool === "scenes" ? (
             <SceneManager state={state} onSceneChange={onSceneChange} onCreateScene={onCreateScene} onDeleteScene={onDeleteScene} />
+          ) : null}
+
+          {activeTool === "map" ? (
+            <MapToolPanel
+              state={state}
+              isMaster={true}
+              onCreateMap={onCreateMap}
+              onSetActiveMap={onSetActiveMap}
+              onDeleteMap={onDeleteMap}
+              onDuplicateMap={onDuplicateMap}
+              onUpdateCharacterPosition={onUpdateMapCharacterPosition}
+            />
           ) : null}
 
           {activeTool === "chat" ? (
@@ -303,12 +330,26 @@ export function MasterControlRoom({
           onIdentityChange={onIdentityChange}
           onSceneChange={onSceneChange}
           onAudioChange={onAudioChange}
+          onSetActiveMap={onSetActiveMap}
+          onUpdateMapCharacterPosition={onUpdateMapCharacterPosition}
           onSaveRoom={onSaveRoom}
           onDeleteRoom={onDeleteRoom}
           onOpenTool={setActiveTool}
           onQuickCue={launchQuickCue}
+          onDirectorEvent={(event) => {
+            if (event.recipientUserId) {
+              onPrivateMessage(event.message, event.recipientUserId);
+            } else {
+              onPublicMessage(event.message);
+            }
+          }}
+          onCreateDiceRequest={onCreateDiceRequest}
+          onDrawCard={onDrawCard}
           actionLog={actionLog}
         />
+      </div>
+      <div className="relative z-20">
+        <AudioPlayer track={currentAudio} />
       </div>
       {isSoundbarOpen ? (
         <SoundbarModal
@@ -332,10 +373,15 @@ function DirectorRightRail({
   onIdentityChange,
   onSceneChange,
   onAudioChange,
+  onSetActiveMap,
+  onUpdateMapCharacterPosition,
   onSaveRoom,
   onDeleteRoom,
   onOpenTool,
   onQuickCue,
+  onDirectorEvent,
+  onCreateDiceRequest,
+  onDrawCard,
   actionLog
 }: {
   state: RoomState;
@@ -344,10 +390,15 @@ function DirectorRightRail({
   onIdentityChange: (id: string) => void;
   onSceneChange: (scene: Scene) => void;
   onAudioChange: (track: AudioTrack) => void;
+  onSetActiveMap: (map: NarrativeMap) => void | Promise<void>;
+  onUpdateMapCharacterPosition: (position: MapCharacterPosition, values: { x: number; y: number; narrativeLocation: string; isVisibleToPlayers: boolean; isLocked: boolean }) => void | Promise<void>;
   onSaveRoom: () => void;
   onDeleteRoom: () => void;
   onOpenTool: (tool: ControlTool) => void;
   onQuickCue: (cue: DirectorCue) => void;
+  onDirectorEvent: (event: { message: string; recipientUserId?: string | null }) => void;
+  onCreateDiceRequest: (values: { diceCount?: number; diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void | Promise<void>;
+  onDrawCard: (values: { deck: CardDeckType; targetUserId?: string | null; visibility: "public" | "private"; reason: string }) => void | Promise<void>;
   actionLog: { id: string; label: string; detail?: string; created_at: string }[];
 }) {
   const activeIdentity = identityId === "master" ? "Master / Narratore" : state.npcs.find((npc) => npc.id === identityId)?.name ?? "Master / Narratore";
@@ -397,7 +448,10 @@ function DirectorRightRail({
         </div>
       </section>
 
+      <DirectorQuickMapPanel state={state} onOpenTool={onOpenTool} onSetActiveMap={onSetActiveMap} onUpdateMapCharacterPosition={onUpdateMapCharacterPosition} />
+      <DirectorRandomPanel state={state} onCreateDiceRequest={onCreateDiceRequest} onDrawCard={onDrawCard} />
       <DirectorCuePanel onLaunch={onQuickCue} />
+      <DirectorEventBuilder state={state} onLaunch={onDirectorEvent} />
       <DirectorTimelinePanel state={state} actionLog={actionLog} />
       <DirectorRecapPanel state={state} currentAudio={currentAudio} actionLog={actionLog} />
 
@@ -577,6 +631,271 @@ function DirectorRecapPanel({
       <button type="button" onClick={downloadRecap} className="director-cinematic-button mt-3 w-full">
         <ScrollText size={16} />
         Scarica recap
+      </button>
+    </section>
+  );
+}
+
+function DirectorQuickMapPanel({
+  state,
+  onOpenTool,
+  onSetActiveMap,
+  onUpdateMapCharacterPosition
+}: {
+  state: RoomState;
+  onOpenTool: (tool: ControlTool) => void;
+  onSetActiveMap: (map: NarrativeMap) => void | Promise<void>;
+  onUpdateMapCharacterPosition: (position: MapCharacterPosition, values: { x: number; y: number; narrativeLocation: string; isVisibleToPlayers: boolean; isLocked: boolean }) => void | Promise<void>;
+}) {
+  const activeMap = state.maps.find((map) => map.is_active) ?? state.maps[0];
+  const positions = activeMap ? buildQuickMapPositions(activeMap, state.characters, state.mapCharacterPositions) : [];
+
+  function nudge(position: MapCharacterPosition, deltaX: number, deltaY: number) {
+    if (!activeMap || position.is_locked) return;
+    onUpdateMapCharacterPosition(position, {
+      x: clampPercent(position.x + deltaX),
+      y: clampPercent(position.y + deltaY),
+      narrativeLocation: position.narrative_location || activeMap.title,
+      isVisibleToPlayers: position.is_visible_to_players,
+      isLocked: position.is_locked
+    });
+  }
+
+  return (
+    <section className="director-rail-section">
+      <h3 className="director-mini-title">
+        <MapPinned size={15} /> Mappa rapida
+      </h3>
+      {activeMap ? (
+        <>
+          <button type="button" onClick={() => onOpenTool("map")} className="director-current-card mt-3">
+            <span className="h-14 w-16 shrink-0 rounded-md bg-cover bg-center" style={{ backgroundImage: `url(${activeMap.image_url})` }} />
+            <span className="min-w-0 text-left">
+              <strong className="block truncate text-sm text-stone-100">{activeMap.title}</strong>
+              <small className="line-clamp-2 text-xs leading-5 text-stone-400">{activeMap.description || "Mappa sessione"}</small>
+            </span>
+          </button>
+          <div className="mt-3 grid gap-2">
+            {state.maps.slice(0, 4).map((map) => (
+              <button key={map.id} type="button" onClick={() => onSetActiveMap(map)} className={`director-small-button text-left ${map.id === activeMap.id ? "is-warm" : ""}`}>
+                {map.is_active ? "In scena: " : "Mostra: "} {map.title}
+              </button>
+            ))}
+          </div>
+          {positions.length ? (
+            <div className="mt-3 grid gap-2">
+              <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Indicatori giocatori</p>
+              {positions.map((position) => {
+                const character = state.characters.find((item) => item.id === position.character_id);
+                if (!character) return null;
+                return (
+                  <div key={position.id} className="director-map-nudge-row">
+                    <span className="min-w-0 truncate" style={{ color: character.color }}>
+                      {character.character_name}
+                    </span>
+                    <div>
+                      <button type="button" onClick={() => nudge(position, 0, -5)} aria-label={`Sposta ${character.character_name} in alto`}>↑</button>
+                      <button type="button" onClick={() => nudge(position, -5, 0)} aria-label={`Sposta ${character.character_name} a sinistra`}>←</button>
+                      <button type="button" onClick={() => nudge(position, 5, 0)} aria-label={`Sposta ${character.character_name} a destra`}>→</button>
+                      <button type="button" onClick={() => nudge(position, 0, 5)} aria-label={`Sposta ${character.character_name} in basso`}>↓</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="mt-3 rounded-lg border border-dashed border-brass/25 p-3 text-sm text-stone-400">
+          Nessuna mappa caricata. Apri lo strumento Mappa per crearne una.
+        </div>
+      )}
+      <button type="button" onClick={() => onOpenTool("map")} className="director-small-button mt-3 w-full">
+        Apri gestione mappe
+      </button>
+    </section>
+  );
+}
+
+function DirectorRandomPanel({
+  state,
+  onCreateDiceRequest,
+  onDrawCard
+}: {
+  state: RoomState;
+  onCreateDiceRequest: (values: { diceCount?: number; diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void | Promise<void>;
+  onDrawCard: (values: { deck: CardDeckType; targetUserId?: string | null; visibility: "public" | "private"; reason: string }) => void | Promise<void>;
+}) {
+  const [diceCount, setDiceCount] = useState(1);
+  const [diceSides, setDiceSides] = useState(20);
+  const [diceTarget, setDiceTarget] = useState("");
+  const [diceReason, setDiceReason] = useState("");
+  const [cardDeck, setCardDeck] = useState<CardDeckType>("poker");
+  const [cardTarget, setCardTarget] = useState("");
+  const [cardReason, setCardReason] = useState("");
+
+  return (
+    <section className="director-rail-section director-random-panel">
+      <h3 className="director-mini-title">Dadi e carte</h3>
+      <div className="mt-3 grid gap-3">
+        <form
+          className="director-random-box"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onCreateDiceRequest({
+              diceCount,
+              diceSides,
+              reason: diceReason.trim(),
+              targetUserId: diceTarget || null,
+              visibility: diceTarget ? "private" : "public"
+            });
+            setDiceReason("");
+          }}
+        >
+          <p>Richiesta tiro rapida</p>
+          <div className="grid grid-cols-[4.5rem_1fr] gap-2">
+            <input className="field px-2 py-2 text-sm" type="number" min="1" max="20" value={diceCount} onChange={(event) => setDiceCount(Math.max(1, Number(event.target.value)))} aria-label="Numero dadi rapido" />
+            <select className="field px-2 py-2 text-sm" value={diceSides} onChange={(event) => setDiceSides(Number(event.target.value))}>
+              {[4, 6, 8, 10, 12, 20, 100].map((sides) => <option key={sides} value={sides}>d{sides}</option>)}
+            </select>
+          </div>
+          <select className="field px-2 py-2 text-sm" value={diceTarget} onChange={(event) => setDiceTarget(event.target.value)}>
+            <option value="">Tutti</option>
+            {state.characters.map((character) => (
+              <option key={character.id} value={character.user_id}>{character.character_name} {character.character_surname}</option>
+            ))}
+          </select>
+          <input className="field px-2 py-2 text-sm" placeholder="Motivo" value={diceReason} onChange={(event) => setDiceReason(event.target.value)} />
+          <button className="director-small-button is-warm" type="submit">Richiedi tiro</button>
+        </form>
+
+        <form
+          className="director-random-box"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onDrawCard({
+              deck: cardDeck,
+              targetUserId: cardTarget || null,
+              visibility: cardTarget ? "private" : "public",
+              reason: cardReason.trim()
+            });
+            setCardReason("");
+          }}
+        >
+          <p>Estrazione carte</p>
+          <select className="field px-2 py-2 text-sm" value={cardDeck} onChange={(event) => setCardDeck(event.target.value as CardDeckType)}>
+            <option value="poker">Mazzo poker</option>
+            <option value="regional">Mazzo regionale italiano</option>
+          </select>
+          <select className="field px-2 py-2 text-sm" value={cardTarget} onChange={(event) => setCardTarget(event.target.value)}>
+            <option value="">Pubblica</option>
+            {state.characters.map((character) => (
+              <option key={character.id} value={character.user_id}>Privata: {character.character_name}</option>
+            ))}
+          </select>
+          <input className="field px-2 py-2 text-sm" placeholder="Motivo estrazione" value={cardReason} onChange={(event) => setCardReason(event.target.value)} />
+          <button className="director-small-button is-warm" type="submit">Estrai carta</button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+type DirectorEventPreset = {
+  id: string;
+  label: string;
+  detail: string;
+  template: string;
+  tone: "reveal" | "danger" | "vision" | "chapter";
+};
+
+const directorEventPresets: DirectorEventPreset[] = [
+  {
+    id: "npc-entry",
+    label: "Entrata NPC",
+    detail: "Presenta un volto importante",
+    tone: "reveal",
+    template: "[evento] Una presenza entra nella scena. Ogni conversazione si interrompe mentre tutti ne percepiscono il peso."
+  },
+  {
+    id: "secret",
+    label: "Segreto",
+    detail: "Indizio per pochi occhi",
+    tone: "vision",
+    template: "[sussurro] Noti un dettaglio che gli altri non sembrano cogliere."
+  },
+  {
+    id: "threat",
+    label: "Minaccia",
+    detail: "Alza la tensione",
+    tone: "danger",
+    template: "[evento] Qualcosa cambia nell'aria. La stanza sembra trattenere il respiro."
+  },
+  {
+    id: "chapter-note",
+    label: "Beat di capitolo",
+    detail: "Segna un passaggio chiave",
+    tone: "chapter",
+    template: "[capitolo] Questo momento resta inciso nella memoria della sessione."
+  }
+];
+
+function DirectorEventBuilder({
+  state,
+  onLaunch
+}: {
+  state: RoomState;
+  onLaunch: (event: { message: string; recipientUserId?: string | null }) => void;
+}) {
+  const [selectedPreset, setSelectedPreset] = useState(directorEventPresets[0]);
+  const [target, setTarget] = useState("public");
+  const [message, setMessage] = useState(selectedPreset.template);
+
+  function selectPreset(preset: DirectorEventPreset) {
+    setSelectedPreset(preset);
+    setMessage(preset.template);
+  }
+
+  return (
+    <section className="director-rail-section director-event-builder">
+      <h3 className="director-mini-title">Event builder</h3>
+      <p className="mt-2 text-xs leading-5 text-stone-400">Costruisci un beat narrativo rapido senza aprire altri pannelli.</p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {directorEventPresets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            onClick={() => selectPreset(preset)}
+            className={`director-event-preset director-event-preset--${preset.tone} ${selectedPreset.id === preset.id ? "is-active" : ""}`}
+          >
+            <span>{preset.label}</span>
+            <small>{preset.detail}</small>
+          </button>
+        ))}
+      </div>
+      <select className="field mt-3 w-full px-3 py-2 text-sm" value={target} onChange={(event) => setTarget(event.target.value)}>
+        <option value="public">Pubblico: tutta la stanza</option>
+        {state.characters.map((character) => (
+          <option key={character.id} value={character.user_id}>
+            Privato: {character.character_name} {character.character_surname}
+          </option>
+        ))}
+      </select>
+      <textarea
+        className="field mt-2 min-h-24 resize-none px-3 py-2 text-sm"
+        value={message}
+        onChange={(event) => setMessage(event.target.value)}
+        placeholder="Scrivi evento narrativo..."
+      />
+      <button
+        type="button"
+        className="director-cinematic-button mt-3 w-full"
+        onClick={() => {
+          if (!message.trim()) return;
+          onLaunch({ message: message.trim(), recipientUserId: target === "public" ? null : target });
+        }}
+      >
+        <Send size={16} /> Lancia evento
       </button>
     </section>
   );
@@ -809,6 +1128,30 @@ function isOnline(state: RoomState, userId: string) {
   return Boolean(presence && Date.now() - new Date(presence.last_seen_at).getTime() < 45000);
 }
 
+function buildQuickMapPositions(map: NarrativeMap, characters: RoomState["characters"], positions: MapCharacterPosition[]) {
+  const existingForMap = positions.filter((position) => position.map_id === map.id);
+  const positionedCharacters = new Set(existingForMap.map((position) => position.character_id));
+  const virtualPositions = characters
+    .filter((character) => !positionedCharacters.has(character.id))
+    .map((character, index) => ({
+      id: `virtual-position:${map.id}:${character.id}`,
+      map_id: map.id,
+      character_id: character.id,
+      x: clampPercent(18 + (index % 4) * 18),
+      y: clampPercent(22 + Math.floor(index / 4) * 16),
+      narrative_location: map.title,
+      is_visible_to_players: true,
+      is_locked: false,
+      updated_at: new Date(0).toISOString()
+    }));
+
+  return [...existingForMap, ...virtualPositions];
+}
+
+function clampPercent(value: number) {
+  return Math.min(96, Math.max(4, value));
+}
+
 function buildSessionMediaAssets(state: RoomState): MediaAsset[] {
   const derivedAssets: MediaAsset[] = [];
 
@@ -839,6 +1182,18 @@ function buildSessionMediaAssets(state: RoomState): MediaAsset[] {
       });
     }
   }
+
+  const mapAssets = state.maps.map((map) => ({
+    id: `map:${map.id}`,
+    room_id: map.room_id,
+    title: `${map.title} - mappa`,
+    asset_type: "map" as const,
+    url: map.image_url,
+    tags: ["mappa", map.level_type, map.is_visible_to_players ? "pubblica" : "privata"],
+    created_by: map.created_by ?? null,
+    created_at: map.updated_at ?? map.created_at
+  }));
+  derivedAssets.push(...mapAssets);
 
   for (const track of state.audioTracks) {
     if (!track.audio_url) continue;
@@ -1179,8 +1534,9 @@ function AudioPanel({
       <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-brass">
         <AudioLines size={16} /> Audio attuale
       </h2>
-      <div className="mt-4">
-        <AudioPlayer track={currentAudio} />
+      <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3">
+        <p className="text-sm font-semibold text-stone-100">{currentAudio.title}</p>
+        <p className="mt-1 text-xs text-stone-400">Il player resta attivo mentre cambi strumenti nella cabina di regia.</p>
       </div>
       {expanded ? (
         <div className="mt-4 grid gap-2">
@@ -1221,8 +1577,9 @@ function AudioManager({
   return (
     <section className="director-tool-panel glass-panel rounded-lg p-4">
       <ToolHeading icon={<AudioLines size={17} />} eyebrow="Atmosfera" title="Audio" detail="Scegli la traccia della scena e prepara nuove musiche ambientali." />
-      <div className="mt-4">
-        <AudioPlayer track={currentAudio} />
+      <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3">
+        <p className="text-sm font-semibold text-stone-100">In riproduzione: {currentAudio.title}</p>
+        <p className="mt-1 text-xs text-stone-400">La riproduzione e gestita dal player persistente in fondo alla cabina.</p>
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="director-audio-grid">
@@ -1398,7 +1755,12 @@ function MediaLibraryPanel({
   const [tags, setTags] = useState("");
   const [file, setFile] = useState<File | undefined>();
   const [query, setQuery] = useState("");
-  const visibleAssets = assets.filter((asset) => `${asset.title} ${asset.asset_type} ${(asset.tags ?? []).join(" ")}`.toLowerCase().includes(query.toLowerCase()));
+  const [typeFilter, setTypeFilter] = useState<MediaAsset["asset_type"] | "all">("all");
+  const visibleAssets = assets.filter((asset) => {
+    if (typeFilter !== "all" && asset.asset_type !== typeFilter) return false;
+    return `${asset.title} ${asset.asset_type} ${(asset.tags ?? []).join(" ")}`.toLowerCase().includes(query.toLowerCase());
+  });
+  const mediaTypes: Array<MediaAsset["asset_type"] | "all"> = ["all", "image", "video", "map", "audio", "sound", "portrait", "object"];
 
   return (
     <section className="glass-panel rounded-lg p-4">
@@ -1408,12 +1770,23 @@ function MediaLibraryPanel({
         </h2>
         <input className="field max-w-xs px-3 py-2 text-sm" placeholder="Cerca asset..." value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>
+      <div className="director-media-filterbar mt-4">
+        {mediaTypes.map((type) => {
+          const count = type === "all" ? assets.length : assets.filter((asset) => asset.asset_type === type).length;
+          return (
+            <button key={type} type="button" className={typeFilter === type ? "is-active" : ""} onClick={() => setTypeFilter(type)}>
+              <span>{type === "all" ? "Tutti" : type}</span>
+              <small>{count}</small>
+            </button>
+          );
+        })}
+      </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="grid content-start gap-3 md:grid-cols-2">
+        <div className="director-media-grid grid content-start gap-3 md:grid-cols-2">
           {visibleAssets.map((asset) => (
-            <article key={asset.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <article key={asset.id} className={`director-media-card director-media-card--${asset.asset_type}`}>
               <div className="aspect-video overflow-hidden rounded-md bg-black/40">
-                {asset.asset_type === "image" || asset.asset_type === "portrait" || asset.asset_type === "object" ? (
+                {asset.asset_type === "image" || asset.asset_type === "portrait" || asset.asset_type === "object" || asset.asset_type === "map" ? (
                   <div className="h-full bg-cover bg-center" style={{ backgroundImage: `url(${asset.url})` }} />
                 ) : asset.asset_type === "video" ? (
                   <video className="h-full w-full object-cover" src={asset.url} muted playsInline />
@@ -1465,6 +1838,7 @@ function MediaLibraryPanel({
           <select className="field px-3 py-2 text-sm" value={assetType} onChange={(event) => setAssetType(event.target.value as MediaAsset["asset_type"])}>
             <option value="image">Immagine scena</option>
             <option value="video">Video scena</option>
+            <option value="map">Mappa</option>
             <option value="audio">Musica</option>
             <option value="sound">Rumore</option>
             <option value="portrait">Portrait</option>

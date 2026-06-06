@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import type { Character, ChatFilter, Message, Npc, RoomTyping } from "@/lib/types";
 import { cn, shortTime } from "@/lib/utils";
 
+const TECHNICAL_MESSAGE_PREFIXES = ["__gdr_map_sync__:"];
+
 type ChatPanelProps = {
   messages: Message[];
   value: string;
@@ -50,8 +52,9 @@ export function ChatPanel({
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
-  const latestOwnMessageId = [...messages].reverse().find((message) => message.sender_user_id === currentUserId)?.id;
-  const filteredMessages = useMemo(() => filterMessages(messages, filter, search), [messages, filter, search]);
+  const visibleMessages = useMemo(() => messages.filter((message) => !isTechnicalMessage(message)), [messages]);
+  const latestOwnMessageId = [...visibleMessages].reverse().find((message) => message.sender_user_id === currentUserId)?.id;
+  const filteredMessages = useMemo(() => filterMessages(visibleMessages, filter, search), [visibleMessages, filter, search]);
   const activeTyping = typing.filter((item) => item.user_id !== currentUserId && item.channel === "gdr" && Date.now() - new Date(item.updated_at).getTime() < 6000);
 
   return (
@@ -108,6 +111,7 @@ export function ChatPanel({
         {filteredMessages.map((message) => {
           const avatar = resolveChatAvatar(message, characters, npcs);
           const meta = messageMeta(message);
+          const narrative = parseNarrativeContent(message.content);
 
           return (
             <article
@@ -116,6 +120,7 @@ export function ChatPanel({
                 "story-message",
                 `story-message--${message.sender_type}`,
                 meta.isDice ? "story-message--dice" : "",
+                narrative.kind ? `story-message--narrative-${narrative.kind}` : "",
                 message.is_private ? "story-message--private" : "",
                 message.is_pinned ? "story-message--pinned" : "",
                 showAvatars ? "grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3" : ""
@@ -186,7 +191,8 @@ export function ChatPanel({
               </form>
             ) : (
               <p className="story-message-content mt-1 whitespace-pre-wrap text-sm leading-6 text-white">
-                {meta.isDice ? message.content : <>“{message.content}”</>} {message.edited_at ? <span className="text-xs text-slate-500">(modificato)</span> : null}
+                {!meta.isDice && narrative.label ? <span className="story-narrative-label">{narrative.label}</span> : null}
+                {meta.isDice ? message.content : narrative.wrap ? <>“{narrative.content}”</> : narrative.content} {message.edited_at ? <span className="text-xs text-slate-500">(modificato)</span> : null}
               </p>
             )}
               </div>
@@ -214,6 +220,19 @@ export function ChatPanel({
           onSend();
         }}
       >
+        <div className="mb-2 flex flex-wrap gap-2">
+          {narrativeModes.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              className="story-compose-mode"
+              onClick={() => onChange(applyNarrativePrefix(value, mode.prefix))}
+              disabled={disabled}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-2">
           <textarea
             className="field min-h-12 flex-1 resize-none px-3 py-3 text-sm"
@@ -256,6 +275,42 @@ function messageMeta(message: Message) {
   return { label: "Giocatore", icon: <UserRound size={13} />, isDice };
 }
 
+const narrativeModes = [
+  { id: "dialogue", label: "Dialogo", prefix: "" },
+  { id: "action", label: "Azione", prefix: "[azione] " },
+  { id: "thought", label: "Pensiero", prefix: "[pensiero] " },
+  { id: "event", label: "Evento", prefix: "[evento] " }
+];
+
+function applyNarrativePrefix(value: string, prefix: string) {
+  const stripped = value.replace(/^\[(azione|pensiero|evento|capitolo|sussurro)\]\s*/i, "");
+  return `${prefix}${stripped}`.trimStart();
+}
+
+function parseNarrativeContent(content: string) {
+  const match = content.match(/^\[(azione|pensiero|evento|capitolo|sussurro)\]\s*(.*)$/i);
+  if (!match) {
+    return { kind: "", label: "", content, wrap: true };
+  }
+
+  const kind = match[1].toLowerCase();
+  return {
+    kind,
+    label: narrativeLabel(kind),
+    content: match[2],
+    wrap: kind === "sussurro"
+  };
+}
+
+function narrativeLabel(kind: string) {
+  if (kind === "azione") return "Azione";
+  if (kind === "pensiero") return "Pensiero";
+  if (kind === "evento") return "Evento";
+  if (kind === "capitolo") return "Capitolo";
+  if (kind === "sussurro") return "Sussurro";
+  return "";
+}
+
 function resolveChatAvatar(message: Message, characters: Character[], npcs: Npc[]) {
   if (message.sender_type === "npc" && message.npc_id) {
     const npc = npcs.find((item) => item.id === message.npc_id);
@@ -271,6 +326,10 @@ function resolveChatAvatar(message: Message, characters: Character[], npcs: Npc[
   }
 
   return { url: "", fallback: "M" };
+}
+
+function isTechnicalMessage(message: Message) {
+  return TECHNICAL_MESSAGE_PREFIXES.some((prefix) => message.content.startsWith(prefix));
 }
 
 function filterMessages(messages: Message[], filter: ChatFilter, search: string) {

@@ -293,5 +293,112 @@ export const demoRoomState: RoomState = {
       content: "Eldric sa della porta. Madama Veyr evita di guardare la serra.",
       updated_at: now
     }
-  ]
+  ],
+  maps: [
+    {
+      id: "map-1",
+      campaign_id: "campaign-1",
+      room_id: "room-1",
+      parent_map_id: null,
+      title: "Tenuta Veyr",
+      description: "La serra, la villa e i sentieri sommersi dalla pioggia.",
+      image_url: "https://images.unsplash.com/photo-1523413651479-597eb2da0ad6?auto=format&fit=crop&w=1800&q=85",
+      level_type: "building",
+      is_active: true,
+      is_visible_to_players: true,
+      created_by: "user-master",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "map-2",
+      campaign_id: "campaign-1",
+      room_id: "room-1",
+      parent_map_id: "map-1",
+      title: "Serra Chiusa",
+      description: "Vetri appannati, file di piante nere e una porta sigillata.",
+      image_url: "https://images.unsplash.com/photo-1563950708942-db5d9dcca7d7?auto=format&fit=crop&w=1800&q=85",
+      level_type: "room",
+      is_active: false,
+      is_visible_to_players: false,
+      created_by: "user-master",
+      created_at: now,
+      updated_at: now
+    }
+  ],
+  mapHotspots: [
+    {
+      id: "hotspot-1",
+      map_id: "map-1",
+      title: "Ingresso serra",
+      description: "Apre la sottomappa della serra.",
+      type: "map",
+      icon: "Door",
+      color: "#f59e0b",
+      x: 62,
+      y: 48,
+      target_map_id: "map-2",
+      target_scene_id: "scene-1",
+      target_audio_id: null,
+      target_event_id: null,
+      is_visible_to_players: true,
+      created_at: now,
+      updated_at: now
+    }
+  ],
+  mapCharacterPositions: [
+    {
+      id: "map-pos-1",
+      map_id: "map-1",
+      character_id: "char-1",
+      x: 32,
+      y: 56,
+      narrative_location: "Tenuta Veyr > Serra",
+      is_visible_to_players: true,
+      is_locked: false,
+      updated_at: now
+    },
+    {
+      id: "map-pos-2",
+      map_id: "map-1",
+      character_id: "char-2",
+      x: 42,
+      y: 61,
+      narrative_location: "Tenuta Veyr > Serra",
+      is_visible_to_players: true,
+      is_locked: false,
+      updated_at: now
+    }
+  ],
+  mapNpcMarkers: [
+    {
+      id: "npc-marker-1",
+      map_id: "map-1",
+      npc_id: "npc-1",
+      x: 70,
+      y: 42,
+      is_visible_to_players: false,
+      status: "nascosto",
+      created_at: now,
+      updated_at: now
+    }
+  ],
+  mapCustomMarkers: [
+    {
+      id: "marker-1",
+      map_id: "map-1",
+      title: "Porta sigillata",
+      description: "Cera rossa ancora calda.",
+      type: "clue",
+      icon: "Seal",
+      color: "#ef4444",
+      x: 79,
+      y: 51,
+      is_visible_to_players: true,
+      created_at: now,
+      updated_at: now
+    }
+  ],
+  mapFogAreas: [],
+  mapEvents: []
 };

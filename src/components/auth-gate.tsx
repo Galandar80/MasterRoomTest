@@ -19,6 +19,20 @@ export function AuthGate({ children }: AuthGateProps) {
   const supabase = createClient();
 
   useEffect(() => {
+    const handleRejectedSession = (event: PromiseRejectionEvent) => {
+      if (!isInvalidRefreshTokenError(event.reason)) return;
+      event.preventDefault();
+      clearSupabaseAuthStorage();
+      setIsAuthed(false);
+      setIsBusy(false);
+      setMessage("Sessione locale scaduta o non valida. Accedi di nuovo.");
+    };
+
+    window.addEventListener("unhandledrejection", handleRejectedSession);
+    return () => window.removeEventListener("unhandledrejection", handleRejectedSession);
+  }, []);
+
+  useEffect(() => {
     if (!supabase) return;
 
     async function initializeAuth() {

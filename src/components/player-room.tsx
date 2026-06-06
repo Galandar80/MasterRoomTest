@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type React from "react";
-import { ArrowLeft, Backpack, BookOpenText, CircleHelp, Copy, MessageCircle, Plus, ScrollText, UsersRound, X } from "lucide-react";
+import { ArrowLeft, Backpack, BookOpenText, CircleHelp, Copy, Eye, EyeOff, MapPinned, MessageCircle, Plus, ScrollText, UsersRound, X } from "lucide-react";
 import type { AudioTrack, Message, RoomState } from "@/lib/types";
 import { splitSides } from "@/lib/utils";
 import { AudioPlayer } from "@/components/room/audio-player";
@@ -13,6 +13,7 @@ import { SceneStage } from "@/components/room/scene-stage";
 import { SoundEffectPlayer } from "@/components/room/sound-effect-player";
 import { ExportChatButton, OffChatPanel, PrivateThreadsPanel } from "@/components/room/social-panels";
 import { PlayerDicePanel, SpotlightPanel } from "@/components/room/dice-and-spotlight";
+import { MapToolPanel } from "@/components/room/map-tool-panel";
 import type { DiceRequest } from "@/lib/types";
 
 type PlayerRoomProps = {
@@ -29,14 +30,15 @@ type PlayerRoomProps = {
   onExportMessages: () => Promise<Message[]>;
 };
 
-type MobileTab = "chat" | "sheet" | "off" | "private";
-type UtilityPanel = "notes" | "inventory" | "private" | "help" | null;
+type MobileTab = "chat" | "map" | "sheet" | "private" | "off";
+type UtilityPanel = "notes" | "inventory" | "private" | "map" | "help" | null;
 
 export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend, onOffSend, onTyping, onRollDice, onCreateNote, onLoadOlderMessages, onExportMessages }: PlayerRoomProps) {
   const [playerText, setPlayerText] = useState("");
   const [offText, setOffText] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("chat");
   const [utilityPanel, setUtilityPanel] = useState<UtilityPanel>(null);
+  const [immersiveMode, setImmersiveMode] = useState(false);
   const [leftCharacters, rightCharacters] = useMemo(() => splitSides(state.characters), [state.characters]);
   const currentCharacter = state.characters.find((character) => character.user_id === state.profile.id) ?? state.characters[0];
   const visibleDiceRequests = state.diceRequests.filter((request) => !request.target_user_id || request.target_user_id === state.profile.id);
@@ -47,7 +49,7 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
     state.room.chat_enabled === false ? "Chat comune disattivata dal Master" : "Il Master ha disattivato la tua chat";
 
   return (
-    <section className="player-room-shell relative -m-4 min-h-screen overflow-hidden px-3 py-3 sm:-m-6 sm:px-4 sm:py-4">
+    <section className={`player-room-shell relative -m-4 min-h-screen overflow-hidden px-3 py-3 sm:-m-6 sm:px-4 sm:py-4 ${immersiveMode ? "is-immersive" : ""}`}>
       <div className="pointer-events-none absolute inset-0 bg-[url('/assets/master/director-room-bg.png')] bg-cover bg-center opacity-45" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(2,3,7,0.92),rgba(3,5,9,0.68)_50%,rgba(2,3,7,0.92)),linear-gradient(180deg,rgba(0,0,0,0.16),rgba(0,0,0,0.82))]" />
       <div className="relative z-10 grid gap-3">
@@ -57,10 +59,12 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
           privateCount={state.privateMessages.length}
           currentCharacter={currentCharacter}
           onOpenUtility={setUtilityPanel}
+          immersiveMode={immersiveMode}
+          onToggleImmersive={() => setImmersiveMode((value) => !value)}
         />
         <MobileCharacterStrip characters={state.characters} currentUserId={state.profile.id} />
-        <div className="grid gap-3 xl:grid-cols-[17rem_minmax(0,1fr)_17rem]">
-      <CharacterRail side="left" characters={leftCharacters} inventory={state.inventory} presence={state.presence} />
+        <div className={`grid gap-3 ${immersiveMode ? "xl:grid-cols-[minmax(0,1fr)]" : "xl:grid-cols-[17rem_minmax(0,1fr)_17rem]"}`}>
+      {immersiveMode ? null : <CharacterRail side="left" characters={leftCharacters} inventory={state.inventory} presence={state.presence} />}
 
       <div className="grid min-w-0 gap-3">
         {spotlightVisible ? <SpotlightPanel room={state.room} npcs={state.npcs} currentUserId={state.profile.id} /> : null}
@@ -103,6 +107,9 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
             />
           </div>
         </div>
+        <div className={mobileTab === "map" ? "block" : "hidden lg:block"}>
+          <MapToolPanel state={state} isMaster={false} />
+        </div>
         <div className={mobileTab === "private" ? "block" : "hidden lg:block"}>
           <details className="glass-panel rounded-lg p-4" open>
             <summary className="cursor-pointer text-sm font-semibold text-white">Privati con il Master</summary>
@@ -136,7 +143,7 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
         <AudioPlayer track={currentAudio} />
       </div>
 
-      <CharacterRail side="right" characters={rightCharacters} inventory={state.inventory} presence={state.presence} />
+      {immersiveMode ? null : <CharacterRail side="right" characters={rightCharacters} inventory={state.inventory} presence={state.presence} />}
         </div>
       </div>
       {currentCharacter ? (
@@ -158,13 +165,17 @@ function PlayerHeader({
   onBack,
   privateCount,
   currentCharacter,
-  onOpenUtility
+  onOpenUtility,
+  immersiveMode,
+  onToggleImmersive
 }: {
   state: RoomState;
   onBack: () => void;
   privateCount: number;
   currentCharacter?: RoomState["characters"][number];
   onOpenUtility: (panel: Exclude<UtilityPanel, null>) => void;
+  immersiveMode: boolean;
+  onToggleImmersive: () => void;
 }) {
   return (
     <header className="player-room-header rounded-xl p-4">
@@ -197,10 +208,12 @@ function PlayerHeader({
               <span className="player-current-stat">PF {currentCharacter.hp}</span>
             </div>
           ) : null}
-          <div className="grid gap-2 sm:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
             <HeaderAction icon={<ScrollText size={16} />} label="Note" onClick={() => onOpenUtility("notes")} />
             <HeaderAction icon={<Backpack size={16} />} label="Inventario" onClick={() => onOpenUtility("inventory")} />
             <HeaderAction icon={<BookOpenText size={16} />} label="Sussurri" badge={privateCount} onClick={() => onOpenUtility("private")} />
+            <HeaderAction icon={<MapPinned size={16} />} label="Mappa" onClick={() => onOpenUtility("map")} />
+            <HeaderAction icon={immersiveMode ? <EyeOff size={16} /> : <Eye size={16} />} label={immersiveMode ? "UI" : "Immersione"} onClick={onToggleImmersive} />
             <HeaderAction icon={<CircleHelp size={16} />} label="" onClick={() => onOpenUtility("help")} />
             <InfoTile label="Stanza" value={state.scene.title} />
             <InfoTile label="Codice invito" value={state.room.invite_code} copy />
@@ -262,6 +275,7 @@ function PlayerUtilityModal({
     notes: "Note personali",
     inventory: "Inventario",
     private: "Sussurri",
+    map: "Mappa",
     help: "Guida rapida"
   };
 
@@ -338,6 +352,8 @@ function PlayerUtilityModal({
           />
         ) : null}
 
+        {panel === "map" ? <MapToolPanel state={state} isMaster={false} /> : null}
+
         {panel === "help" ? (
           <div className="player-help-grid">
             <article>
@@ -381,13 +397,14 @@ function InfoTile({ label, value, copy = false }: { label: string; value: string
 function MobilePlayerTabs({ active, onChange }: { active: MobileTab; onChange: (tab: MobileTab) => void }) {
   const items: Array<{ id: MobileTab; label: string; icon: React.ReactNode }> = [
     { id: "chat", label: "Chat", icon: <MessageCircle size={15} /> },
+    { id: "map", label: "Mappa", icon: <MapPinned size={15} /> },
     { id: "sheet", label: "Scheda", icon: <Backpack size={15} /> },
     { id: "private", label: "Privati", icon: <BookOpenText size={15} /> },
     { id: "off", label: "OFF", icon: <UsersRound size={15} /> }
   ];
 
   return (
-    <nav className="mobile-player-tabs glass-panel sticky top-2 z-20 grid grid-cols-4 gap-1 rounded-lg p-1 lg:hidden">
+    <nav className="mobile-player-tabs glass-panel sticky top-2 z-20 grid grid-cols-5 gap-1 rounded-lg p-1 lg:hidden">
       {items.map((item) => (
         <button
           key={item.id}

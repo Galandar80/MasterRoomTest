@@ -2,14 +2,22 @@
 
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { demoRoomState } from "@/lib/demo-data";
+import { encodeDiceReason } from "@/lib/game-random";
 import type {
   AudioTrack,
   Campaign,
   Character,
   DiceRequest,
   InventoryItem,
+  MapCharacterPosition,
+  MapCustomMarker,
+  MapEvent,
+  MapFogArea,
+  MapHotspot,
+  MapNpcMarker,
   MediaAsset,
   Message,
+  NarrativeMap,
   Npc,
   PlayerNote,
   Profile,
@@ -375,6 +383,25 @@ export async function createGameInSupabase(
     });
   }
 
+  try {
+    await supabase
+      .from("maps")
+      .insert({
+        campaign_id: campaign.id,
+        room_id: room.id,
+        title: `${values.roomName} - mappa iniziale`,
+        description: "Prima mappa narrativa della stanza.",
+        image_url: values.sceneImageUrl || values.coverImageUrl,
+        level_type: "custom",
+        is_active: true,
+        is_visible_to_players: true,
+        created_by: profile.id
+      })
+      .throwOnError();
+  } catch {
+    // Older Supabase schemas can still create the core room; the map migration can be applied afterwards.
+  }
+
   const { data: audio, error: audioError } = await supabase
     .from("audio_tracks")
     .insert({
@@ -560,6 +587,7 @@ export async function loadRoomState(supabase: DatabaseClient, roomId: string, pr
         supabase.from("player_notes").select("*").eq("character_id", currentCharacter.id).order("updated_at", { ascending: false })
       ])
     : [{ data: [] }, { data: [] }];
+  const mapState = await fetchRoomMapState(supabase, room.id, isMaster);
 
   const sessionProfile: Profile = {
     ...profile,
@@ -585,8 +613,82 @@ export async function loadRoomState(supabase: DatabaseClient, roomId: string, pr
     typing: [],
     inventory: (inventory ?? []) as InventoryItem[],
     notes: (notes ?? []) as PlayerNote[],
+    maps: mapState.maps,
+    mapHotspots: mapState.mapHotspots,
+    mapCharacterPositions: mapState.mapCharacterPositions,
+    mapNpcMarkers: mapState.mapNpcMarkers,
+    mapCustomMarkers: mapState.mapCustomMarkers,
+    mapFogAreas: mapState.mapFogAreas,
+    mapEvents: mapState.mapEvents,
     hasOlderMessages: messagePage.hasOlderMessages
   };
+}
+
+async function fetchRoomMapState(supabase: DatabaseClient, roomId: string, isMaster: boolean) {
+  try {
+    const { data: maps, error: mapsError } = await supabase
+      .from("maps")
+      .select("*")
+      .eq("room_id", roomId)
+      .order("is_active", { ascending: false })
+      .order("updated_at", { ascending: false });
+
+    if (mapsError) throw mapsError;
+
+    const roomMaps = ((maps ?? []) as NarrativeMap[]).filter((map) => isMaster || map.is_visible_to_players);
+    const mapIds = roomMaps.map((map) => map.id);
+    if (!mapIds.length) {
+      return {
+        maps: [],
+        mapHotspots: [],
+        mapCharacterPositions: [],
+        mapNpcMarkers: [],
+        mapCustomMarkers: [],
+        mapFogAreas: [],
+        mapEvents: []
+      };
+    }
+
+    const [
+      { data: hotspots },
+      { data: characterPositions },
+      { data: npcMarkers },
+      { data: customMarkers },
+      { data: fogAreas },
+      { data: events }
+    ] = await Promise.all([
+      supabase.from("map_hotspots").select("*").in("map_id", mapIds).order("created_at", { ascending: true }),
+      supabase.from("map_character_positions").select("*").in("map_id", mapIds).order("updated_at", { ascending: false }),
+      supabase.from("map_npc_markers").select("*").in("map_id", mapIds).order("updated_at", { ascending: false }),
+      supabase.from("map_custom_markers").select("*").in("map_id", mapIds).order("created_at", { ascending: true }),
+      supabase.from("map_fog_areas").select("*").in("map_id", mapIds).order("created_at", { ascending: true }),
+      supabase.from("map_events").select("*").in("map_id", mapIds).order("created_at", { ascending: true })
+    ]);
+
+    const allowedMapIds = new Set(mapIds);
+    const filterVisibility = <T extends { map_id: string; is_visible_to_players?: boolean }>(items: T[] = []) =>
+      items.filter((item) => allowedMapIds.has(item.map_id) && (isMaster || item.is_visible_to_players !== false));
+
+    return {
+      maps: roomMaps,
+      mapHotspots: filterVisibility((hotspots ?? []) as MapHotspot[]),
+      mapCharacterPositions: filterVisibility((characterPositions ?? []) as MapCharacterPosition[]),
+      mapNpcMarkers: filterVisibility((npcMarkers ?? []) as MapNpcMarker[]),
+      mapCustomMarkers: filterVisibility((customMarkers ?? []) as MapCustomMarker[]),
+      mapFogAreas: filterVisibility((fogAreas ?? []) as MapFogArea[]),
+      mapEvents: filterVisibility((events ?? []) as MapEvent[])
+    };
+  } catch {
+    return {
+      maps: [],
+      mapHotspots: [],
+      mapCharacterPositions: [],
+      mapNpcMarkers: [],
+      mapCustomMarkers: [],
+      mapFogAreas: [],
+      mapEvents: []
+    };
+  }
 }
 
 async function fetchRoomMessagePage(supabase: DatabaseClient, roomId: string, beforeCreatedAt?: string, limit = ROOM_MESSAGE_PAGE_SIZE): Promise<RoomMessagePage> {
@@ -663,6 +765,108 @@ export async function createScene(
 
   if (error) throw error;
   return data as Scene;
+}
+
+export async function createNarrativeMap(
+  supabase: DatabaseClient,
+  room: Room,
+  profile: Profile,
+  values: {
+    title: string;
+    description: string;
+    imageUrl: string;
+    parentMapId?: string | null;
+    levelType: NarrativeMap["level_type"];
+    isVisibleToPlayers: boolean;
+  }
+) {
+  const { data, error } = await supabase
+    .from("maps")
+    .insert({
+      campaign_id: room.campaign_id,
+      room_id: room.id,
+      parent_map_id: values.parentMapId || null,
+      title: values.title,
+      description: values.description,
+      image_url: values.imageUrl,
+      level_type: values.levelType,
+      is_active: false,
+      is_visible_to_players: values.isVisibleToPlayers,
+      created_by: profile.id
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as NarrativeMap;
+}
+
+export async function setActiveNarrativeMap(supabase: DatabaseClient, roomId: string, mapId: string) {
+  const { error: clearError } = await supabase.from("maps").update({ is_active: false }).eq("room_id", roomId);
+  if (clearError) throw clearError;
+
+  const { data, error } = await supabase
+    .from("maps")
+    .update({ is_active: true, is_visible_to_players: true, updated_at: new Date().toISOString() })
+    .eq("id", mapId)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as NarrativeMap;
+}
+
+export async function duplicateNarrativeMap(supabase: DatabaseClient, map: NarrativeMap, profile: Profile) {
+  const { data, error } = await supabase
+    .from("maps")
+    .insert({
+      campaign_id: map.campaign_id,
+      room_id: map.room_id,
+      parent_map_id: map.parent_map_id,
+      title: `${map.title} copia`,
+      description: map.description,
+      image_url: map.image_url,
+      level_type: map.level_type,
+      is_active: false,
+      is_visible_to_players: false,
+      created_by: profile.id
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as NarrativeMap;
+}
+
+export async function deleteNarrativeMap(supabase: DatabaseClient, map: NarrativeMap) {
+  const { error } = await supabase.from("maps").delete().eq("id", map.id);
+  if (error) throw error;
+}
+
+export async function upsertMapCharacterPosition(
+  supabase: DatabaseClient,
+  position: MapCharacterPosition,
+  values: { x: number; y: number; narrativeLocation: string; isVisibleToPlayers: boolean; isLocked: boolean }
+) {
+  const payload = {
+    map_id: position.map_id,
+    character_id: position.character_id,
+    x: values.x,
+    y: values.y,
+    narrative_location: values.narrativeLocation,
+    is_visible_to_players: values.isVisibleToPlayers,
+    is_locked: values.isLocked,
+    updated_at: new Date().toISOString()
+  };
+
+  const query = position.id.startsWith("virtual-position:") || position.id.startsWith("sync-position:")
+    ? supabase.from("map_character_positions").upsert(payload, { onConflict: "map_id,character_id" })
+    : supabase.from("map_character_positions").update(payload).eq("id", position.id);
+
+  const { data, error } = await query.select("*").single();
+
+  if (error) throw error;
+  return data as MapCharacterPosition;
 }
 
 export async function createSoundEffect(
@@ -901,7 +1105,7 @@ export async function createDiceRequest(
   supabase: DatabaseClient,
   roomId: string,
   profile: Profile,
-  values: { diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }
+  values: { diceCount?: number; diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }
 ) {
   const { data, error } = await supabase
     .from("dice_requests")
@@ -909,7 +1113,7 @@ export async function createDiceRequest(
       room_id: roomId,
       requested_by: profile.id,
       dice_sides: values.diceSides,
-      reason: values.reason,
+      reason: encodeDiceReason(values.reason, values.diceCount ?? 1),
       target_user_id: values.targetUserId || null,
       visibility: values.visibility
     })

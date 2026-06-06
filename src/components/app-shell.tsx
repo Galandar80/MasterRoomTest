@@ -11,6 +11,7 @@ import { MasterControlRoom } from "@/components/master-control-room";
 import { PlayerRoom } from "@/components/player-room";
 import { SuperAdminRooms } from "@/components/superadmin-rooms";
 import { demoRoomState } from "@/lib/demo-data";
+import { cardDeckLabel, drawCard, encodeDiceReason, getDiceCount, rollDice as rollDiceValues, stripDiceCountMarker, type CardDeckType } from "@/lib/game-random";
 import { clearSupabaseAuthStorage, createClient, demoMode } from "@/lib/supabase/client";
 import {
   createGameInSupabase,
@@ -18,6 +19,7 @@ import {
   createDiceRequest,
   createInventoryItem,
   createMediaAsset,
+  createNarrativeMap,
   createPlayerNote,
   createOrUpdateCharacter,
   createNpc,
@@ -27,6 +29,7 @@ import {
   deleteInventoryItem,
   deleteMediaAsset,
   deleteMessage,
+  deleteNarrativeMap,
   deleteNpc,
   deleteScene,
   deleteRoom,
@@ -40,11 +43,13 @@ import {
   listAllRoomsForSuperAdmin,
   listAllMediaForSuperAdmin,
   exportRoomMessages,
+  duplicateNarrativeMap,
   loadInitialRoomState,
   loadOlderRoomMessages,
   loadRoomState,
   profileFromUser,
   rollDiceRequest,
+  setActiveNarrativeMap,
   triggerRoomSoundEffect,
   removePresence,
   upsertPresence,
@@ -55,11 +60,12 @@ import {
   updateRoomSpotlight,
   updateMessageContent,
   updateMessagePinned,
+  upsertMapCharacterPosition,
   updateRoomBySuperAdmin,
   uploadPublicFile
 } from "@/lib/supabase/room-service";
 import type { AdminMediaOverview, AdminRoomOverview } from "@/lib/supabase/room-service";
-import type { AudioTrack, DiceRequest, InventoryItem, MediaAsset, Message, Npc, Room, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
+import type { AudioTrack, DiceRequest, InventoryItem, MapCharacterPosition, MediaAsset, Message, NarrativeMap, Npc, Room, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
 
 type View = "menu" | "create" | "join" | "character" | "player" | "master" | "superadmin";
 type CinematicEvent =
@@ -72,6 +78,15 @@ type CinematicEventPayload =
   | { kind: "npc"; title: string; detail: string; imageUrl?: string }
   | { kind: "sound"; title: string; detail: string }
   | { kind: "whisper"; title: string; detail: string };
+type MapSyncPayload = {
+  kind: "map-sync";
+  roomId: string;
+  revision: string;
+  maps: NarrativeMap[];
+  mapCharacterPositions: MapCharacterPosition[];
+};
+
+const MAP_SYNC_PREFIX = "__gdr_map_sync__:";
 
 export function AppShell() {
   const [view, setView] = useState<View>("menu");
@@ -89,6 +104,8 @@ export function AppShell() {
   const spotlightEventRef = useRef(roomState.room.spotlight_npc_id ?? "");
   const soundEffectEventRef = useRef(roomState.room.current_sound_effect_id ?? "");
   const privateEventIdsRef = useRef(new Set(roomState.privateMessages.map((message) => message.id)));
+  const mapSyncRevisionRef = useRef("");
+  const mapSchemaUnavailableRef = useRef(false);
   const supabase = createClient();
   const currentAudio = useMemo(
     () => roomState.audioTracks.find((track) => track.id === roomState.room.current_audio_id) ?? roomState.audioTracks[0],
@@ -110,6 +127,28 @@ export function AppShell() {
     window.setTimeout(() => {
       setCinematicEvent((current) => (current?.title === event.title && current.kind === event.kind ? null : current));
     }, event.kind === "scene" ? 4800 : 4200);
+  }
+
+  async function broadcastMapSync(nextState: RoomState) {
+    const payload = buildMapSyncPayload(nextState);
+    mapSyncRevisionRef.current = payload.revision;
+
+    if (!supabase || demoMode) return;
+
+    await insertMessage(supabase, {
+      room_id: nextState.room.id,
+      sender_user_id: nextState.profile.id,
+      sender_type: "system",
+      sender_display_name: "Sistema mappe",
+      sender_color: "#c8a35d",
+      npc_id: null,
+      content: `${MAP_SYNC_PREFIX}${JSON.stringify(payload)}`,
+      is_private: false,
+      channel: "gdr",
+      recipient_user_id: null,
+      is_pinned: false,
+      edited_at: null
+    });
   }
 
   useEffect(() => {
@@ -180,13 +219,18 @@ export function AppShell() {
   useEffect(() => {
     if (!supabase || demoMode || !hasCurrentSession || !roomState.room.id) return;
 
-    const channel = supabase
+    let channel = supabase
       .channel(`room-${roomState.room.id}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${roomState.room.id}` },
         (payload) => {
           const message = payload.new as Message;
+          const mapSync = parseMapSyncMessage(message);
+          if (mapSync) {
+            setRoomState((state) => applyMapSyncState(state, mapSync));
+            return;
+          }
           setRoomState((state) => {
             const target = message.is_private ? state.privateMessages : message.channel === "off" ? state.offMessages : state.messages;
             if (target.some((item) => item.id === message.id)) return state;
@@ -274,13 +318,25 @@ export function AppShell() {
         (payload) => {
           setRoomState((state) => updateCollectionEvent(state, "characters", payload, "created_at", true));
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [supabase, hasCurrentSession, roomState.room.id, roomState.profile]);
+
+  useEffect(() => {
+    const latestSync = [...roomState.messages, ...roomState.offMessages, ...roomState.privateMessages]
+      .map(parseMapSyncMessage)
+      .filter((payload): payload is MapSyncPayload => Boolean(payload))
+      .sort((a, b) => b.revision.localeCompare(a.revision))[0];
+
+    if (!latestSync || latestSync.revision === mapSyncRevisionRef.current) return;
+    mapSyncRevisionRef.current = latestSync.revision;
+    setRoomState((state) => applyMapSyncState(state, latestSync));
+  }, [roomState.messages, roomState.offMessages, roomState.privateMessages]);
 
   useEffect(() => {
     if (!supabase || demoMode || !hasCurrentSession || !roomState.room.id) return;
@@ -1146,7 +1202,7 @@ export function AppShell() {
     }
   }
 
-  async function requestDice(values: { diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) {
+  async function requestDice(values: { diceCount?: number; diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) {
     if (!isCurrentMaster) return;
 
     try {
@@ -1163,8 +1219,9 @@ export function AppShell() {
               room_id: state.room.id,
               requested_by: state.profile.id,
               target_user_id: values.targetUserId,
+              dice_count: values.diceCount ?? 1,
               dice_sides: values.diceSides,
-              reason: values.reason,
+              reason: encodeDiceReason(values.reason, values.diceCount ?? 1),
               visibility: values.visibility,
               status: "pending",
               created_at: new Date().toISOString()
@@ -1173,16 +1230,20 @@ export function AppShell() {
           ]
         }));
       }
-      setStatus("Tiro richiesto");
+      setStatus(`Richiesta tiro ${values.diceCount ?? 1}d${values.diceSides} inviata`);
     } catch (diceError) {
       setError(readError(diceError));
     }
   }
 
   async function rollDice(request: DiceRequest) {
-    const result = Math.floor(Math.random() * request.dice_sides) + 1;
+    const diceCount = getDiceCount(request);
+    const roll = rollDiceValues(diceCount, request.dice_sides);
+    const result = roll.total;
     const characterName = currentCharacter ? `${currentCharacter.character_name} ${currentCharacter.character_surname}` : roomState.profile.username;
-    const text = `${characterName} tira d${request.dice_sides}: ${result}${request.reason ? ` (${request.reason})` : ""}`;
+    const reason = stripDiceCountMarker(request.reason);
+    const rollDetail = diceCount > 1 ? `[${roll.results.join(", ")}] totale ${result}` : `${result}`;
+    const text = `${characterName} tira ${diceCount}d${request.dice_sides}: ${rollDetail}${reason ? ` (${reason})` : ""}`;
 
     try {
       setError("");
@@ -1200,6 +1261,15 @@ export function AppShell() {
     } catch (diceError) {
       setError(readError(diceError));
     }
+  }
+
+  function drawNarrativeCard(values: { deck: CardDeckType; targetUserId?: string | null; visibility: "public" | "private"; reason: string }) {
+    if (!isCurrentMaster) return;
+    const card = drawCard(values.deck);
+    const reason = values.reason.trim();
+    const text = `[evento] Estrazione da ${cardDeckLabel(values.deck)}: ${card}${reason ? ` (${reason})` : ""}`;
+    publishMessage(text, values.visibility === "private", values.targetUserId || undefined);
+    setStatus("Carta estratta");
   }
 
   async function saveSpotlight(values: { npcId: string | null; visibility: "off" | "public" | "private"; userIds: string[] }) {
@@ -1222,6 +1292,226 @@ export function AppShell() {
       setStatus("Focus personaggio aggiornato");
     } catch (spotlightError) {
       setError(readError(spotlightError));
+    }
+  }
+
+  async function createMap(values: { title: string; description: string; imageUrl: string; imageFile?: File; parentMapId?: string | null; levelType: NarrativeMap["level_type"]; isVisibleToPlayers: boolean }) {
+    if (!isCurrentMaster) return;
+
+    const localPreviewUrl = values.imageFile ? URL.createObjectURL(values.imageFile) : values.imageUrl;
+    let mapImageUrl = localPreviewUrl;
+
+    try {
+      setError("");
+      if (supabase && !demoMode) {
+        if (values.imageFile) {
+          mapImageUrl = await uploadPublicFile(supabase, "scene-images", values.imageFile, `rooms/${roomState.room.id}/maps`);
+        }
+      }
+
+      if (supabase && !demoMode && !mapSchemaUnavailableRef.current) {
+        const map = await createNarrativeMap(supabase, roomState.room, roomState.profile, { ...values, imageUrl: mapImageUrl });
+        const nextState = { ...roomState, maps: [map, ...roomState.maps.filter((item) => item.id !== map.id)] };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+      } else {
+        const map = createLocalNarrativeMap(roomState.room, roomState.profile.id, values, mapImageUrl);
+        const nextState = { ...roomState, maps: [map, ...roomState.maps] };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+      }
+      setStatus("Mappa creata");
+      logAction("Mappa creata", values.title);
+    } catch (mapError) {
+      if (isMapSchemaError(mapError)) {
+        mapSchemaUnavailableRef.current = true;
+        const map = createLocalNarrativeMap(roomState.room, roomState.profile.id, values, mapImageUrl);
+        const nextState = { ...roomState, maps: [map, ...roomState.maps.filter((item) => item.id !== map.id)] };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+        setStatus("Mappa sincronizzata tramite chat tecnica");
+        setError("");
+        logAction("Mappa sincronizzata", values.title);
+        return;
+      }
+      setError(readError(mapError));
+    }
+  }
+
+  async function setActiveMap(map: NarrativeMap) {
+    if (!isCurrentMaster) return;
+
+    try {
+      setError("");
+      if (supabase && !demoMode && !mapSchemaUnavailableRef.current) {
+        const updated = await setActiveNarrativeMap(supabase, roomState.room.id, map.id);
+        const nextState = {
+          ...roomState,
+          maps: roomState.maps.map((item) => ({ ...item, is_active: item.id === updated.id, is_visible_to_players: item.id === updated.id ? true : item.is_visible_to_players }))
+        };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+      } else {
+        const nextState = {
+          ...roomState,
+          maps: roomState.maps.map((item) => ({ ...item, is_active: item.id === map.id, is_visible_to_players: item.id === map.id ? true : item.is_visible_to_players }))
+        };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+      }
+      setStatus("Mappa attiva aggiornata");
+      logAction("Mappa mostrata ai giocatori", map.title);
+    } catch (mapError) {
+      if (isMapSchemaError(mapError)) {
+        mapSchemaUnavailableRef.current = true;
+        const nextState = {
+          ...roomState,
+          maps: roomState.maps.map((item) => ({ ...item, is_active: item.id === map.id, is_visible_to_players: item.id === map.id ? true : item.is_visible_to_players }))
+        };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+        setStatus("Mappa mostrata ai giocatori tramite chat tecnica");
+        setError("");
+        return;
+      }
+      setError(readError(mapError));
+    }
+  }
+
+  async function duplicateMap(map: NarrativeMap) {
+    if (!isCurrentMaster) return;
+
+    try {
+      setError("");
+      if (supabase && !demoMode && !mapSchemaUnavailableRef.current) {
+        const copy = await duplicateNarrativeMap(supabase, map, roomState.profile);
+        const nextState = { ...roomState, maps: [copy, ...roomState.maps.filter((item) => item.id !== copy.id)] };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+      } else {
+        const copy: NarrativeMap = {
+          ...map,
+          id: crypto.randomUUID(),
+          title: `${map.title} copia`,
+          is_active: false,
+          is_visible_to_players: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        const nextState = { ...roomState, maps: [copy, ...roomState.maps] };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+      }
+      setStatus("Mappa duplicata");
+    } catch (mapError) {
+      if (isMapSchemaError(mapError)) {
+        mapSchemaUnavailableRef.current = true;
+        const copy: NarrativeMap = {
+          ...map,
+          id: crypto.randomUUID(),
+          title: `${map.title} copia`,
+          is_active: false,
+          is_visible_to_players: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        const nextState = { ...roomState, maps: [copy, ...roomState.maps] };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+        setStatus("Mappa duplicata tramite chat tecnica");
+        return;
+      }
+      setError(readError(mapError));
+    }
+  }
+
+  async function deleteMap(map: NarrativeMap) {
+    if (!isCurrentMaster) return;
+    if (roomState.maps.length <= 1) {
+      setError("Non puoi eliminare l'unica mappa della stanza.");
+      return;
+    }
+    if (!window.confirm(`Vuoi eliminare la mappa "${map.title}" e i marker collegati?`)) return;
+
+    try {
+      setError("");
+      if (supabase && !demoMode && !mapSchemaUnavailableRef.current) {
+        await deleteNarrativeMap(supabase, map);
+      }
+      const nextMaps = roomState.maps.filter((item) => item.id !== map.id);
+      const fallbackActiveMap = nextMaps.find((item) => item.is_active) ?? nextMaps[0];
+      const nextState = {
+        ...roomState,
+        maps: nextMaps.map((item) => ({ ...item, is_active: fallbackActiveMap ? item.id === fallbackActiveMap.id : false })),
+        mapHotspots: roomState.mapHotspots.filter((item) => item.map_id !== map.id),
+        mapCharacterPositions: roomState.mapCharacterPositions.filter((item) => item.map_id !== map.id),
+        mapNpcMarkers: roomState.mapNpcMarkers.filter((item) => item.map_id !== map.id),
+        mapCustomMarkers: roomState.mapCustomMarkers.filter((item) => item.map_id !== map.id)
+      };
+      setRoomState(nextState);
+      await broadcastMapSync(nextState);
+      setStatus("Mappa eliminata");
+    } catch (mapError) {
+      if (isMapSchemaError(mapError)) {
+        mapSchemaUnavailableRef.current = true;
+        const nextMaps = roomState.maps.filter((item) => item.id !== map.id);
+        const fallbackActiveMap = nextMaps.find((item) => item.is_active) ?? nextMaps[0];
+        const nextState = {
+          ...roomState,
+          maps: nextMaps.map((item) => ({ ...item, is_active: fallbackActiveMap ? item.id === fallbackActiveMap.id : false })),
+          mapHotspots: roomState.mapHotspots.filter((item) => item.map_id !== map.id),
+          mapCharacterPositions: roomState.mapCharacterPositions.filter((item) => item.map_id !== map.id),
+          mapNpcMarkers: roomState.mapNpcMarkers.filter((item) => item.map_id !== map.id),
+          mapCustomMarkers: roomState.mapCustomMarkers.filter((item) => item.map_id !== map.id)
+        };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+        setStatus("Mappa eliminata tramite chat tecnica");
+        return;
+      }
+      setError(readError(mapError));
+    }
+  }
+
+  async function updateMapCharacterPosition(position: MapCharacterPosition, values: { x: number; y: number; narrativeLocation: string; isVisibleToPlayers: boolean; isLocked: boolean }) {
+    if (!isCurrentMaster) return;
+
+    const optimistic: MapCharacterPosition = {
+      ...position,
+      x: values.x,
+      y: values.y,
+      narrative_location: values.narrativeLocation,
+      is_visible_to_players: values.isVisibleToPlayers,
+      is_locked: values.isLocked,
+      updated_at: new Date().toISOString()
+    };
+
+    const optimisticState = { ...roomState, mapCharacterPositions: upsertLocalMapPosition(roomState.mapCharacterPositions, optimistic) };
+    setRoomState(optimisticState);
+
+    try {
+      if (supabase && !demoMode && !mapSchemaUnavailableRef.current) {
+        const updated = await upsertMapCharacterPosition(supabase, position, values);
+        const nextState = {
+          ...optimisticState,
+          mapCharacterPositions: [updated, ...optimisticState.mapCharacterPositions.filter((item) => item.id !== position.id && item.id !== updated.id)]
+        };
+        setRoomState(nextState);
+        await broadcastMapSync(nextState);
+      } else {
+        await broadcastMapSync(optimisticState);
+      }
+      setStatus("Posizione personaggio aggiornata");
+    } catch (mapError) {
+      if (isMapSchemaError(mapError)) {
+        mapSchemaUnavailableRef.current = true;
+        await broadcastMapSync(optimisticState);
+        setStatus("Indicatore sincronizzato tramite chat tecnica");
+        setError("");
+        return;
+      }
+      setError(readError(mapError));
+      setRoomState((state) => ({ ...state, mapCharacterPositions: upsertLocalMapPosition(state.mapCharacterPositions, position) }));
     }
   }
 
@@ -1387,6 +1677,17 @@ export function AppShell() {
           return;
         }
       }
+      if (syntheticSource === "map") {
+        const map = roomState.maps.find((item) => item.id === syntheticId);
+        if (map) {
+          await deleteMap(map);
+          return;
+        }
+      }
+      if (syntheticSource === "map-fallback") {
+        setError("Questa e una mappa provvisoria generata dalla scena: elimina o modifica la scena collegata.");
+        return;
+      }
 
       if (supabase && !demoMode) {
         await deleteMediaAsset(supabase, asset);
@@ -1537,10 +1838,16 @@ export function AppShell() {
           onDeleteInventoryItem={removeInventoryItem}
           onUpdateChatPermissions={saveChatPermissions}
           onCreateDiceRequest={requestDice}
+          onDrawCard={drawNarrativeCard}
           onUpdateSpotlight={saveSpotlight}
           onUpdateCharacter={saveCharacterByMaster}
           onCreateMediaAsset={addMediaAsset}
           onDeleteMediaAsset={removeMediaAsset}
+          onCreateMap={createMap}
+          onSetActiveMap={setActiveMap}
+          onDeleteMap={deleteMap}
+          onDuplicateMap={duplicateMap}
+          onUpdateMapCharacterPosition={updateMapCharacterPosition}
           onLoadOlderMessages={loadOlderMessages}
           onExportMessages={loadFullChatForExport}
           actionLog={actionLog}
@@ -1652,7 +1959,13 @@ function mergeMessagePages(olderMessages: Message[], currentMessages: Message[])
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
-type CollectionKey = "diceRequests" | "mediaAssets" | "scenes" | "audioTracks" | "soundEffects" | "characters";
+type CollectionKey =
+  | "diceRequests"
+  | "mediaAssets"
+  | "scenes"
+  | "audioTracks"
+  | "soundEffects"
+  | "characters";
 
 function updateCollectionEvent(
   state: RoomState,
@@ -1678,6 +1991,78 @@ function updateCollectionEvent(
   return { ...state, [key]: sorted };
 }
 
+function buildMapSyncPayload(state: RoomState): MapSyncPayload {
+  const visibleMaps = state.maps.filter((map) => map.is_visible_to_players);
+  const visibleMapIds = new Set(visibleMaps.map((map) => map.id));
+  const syncedPositions = state.mapCharacterPositions.filter(
+    (position) => visibleMapIds.has(position.map_id) && position.is_visible_to_players !== false
+  );
+  const positionKeys = new Set(syncedPositions.map((position) => `${position.map_id}:${position.character_id}`));
+  const fallbackPositions = visibleMaps.flatMap((map) =>
+    state.characters
+      .filter((character) => !positionKeys.has(`${map.id}:${character.id}`))
+      .map((character, index) => ({
+        id: `sync-position:${map.id}:${character.id}`,
+        map_id: map.id,
+        character_id: character.id,
+        x: Math.min(82, Math.max(18, 22 + (index % 4) * 16)),
+        y: Math.min(82, Math.max(18, 24 + Math.floor(index / 4) * 14)),
+        narrative_location: map.title,
+        is_visible_to_players: true,
+        is_locked: false,
+        updated_at: new Date(0).toISOString()
+      }))
+  );
+
+  return {
+    kind: "map-sync",
+    roomId: state.room.id,
+    revision: new Date().toISOString(),
+    maps: visibleMaps,
+    mapCharacterPositions: [...syncedPositions, ...fallbackPositions]
+  };
+}
+
+function parseMapSyncMessage(message: Message): MapSyncPayload | null {
+  if (!message.content.startsWith(MAP_SYNC_PREFIX)) return null;
+
+  try {
+    const payload = JSON.parse(message.content.slice(MAP_SYNC_PREFIX.length)) as Partial<MapSyncPayload>;
+    if (payload.kind !== "map-sync" || !payload.roomId || !payload.revision) return null;
+    return {
+      kind: "map-sync",
+      roomId: payload.roomId,
+      revision: payload.revision,
+      maps: Array.isArray(payload.maps) ? (payload.maps as NarrativeMap[]) : [],
+      mapCharacterPositions: Array.isArray(payload.mapCharacterPositions) ? (payload.mapCharacterPositions as MapCharacterPosition[]) : []
+    };
+  } catch {
+    return null;
+  }
+}
+
+function applyMapSyncState(state: RoomState, payload: MapSyncPayload): RoomState {
+  if (payload.roomId !== state.room.id) return state;
+
+  const syncedMapIds = new Set(payload.maps.map((map) => map.id));
+  const activeSyncedMap = payload.maps.find((map) => map.is_active);
+  const privateLocalMaps = state.maps.filter((map) => !map.is_visible_to_players && !syncedMapIds.has(map.id));
+  const nextMaps = [...payload.maps, ...privateLocalMaps].sort((a, b) => {
+    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+    return String(b.updated_at ?? b.created_at).localeCompare(String(a.updated_at ?? a.created_at));
+  });
+
+  return {
+    ...state,
+    maps: nextMaps,
+    mapCharacterPositions: [
+      ...payload.mapCharacterPositions,
+      ...state.mapCharacterPositions.filter((position) => !syncedMapIds.has(position.map_id))
+    ],
+    room: activeSyncedMap ? { ...state.room } : state.room
+  };
+}
+
 function generateInviteCode(title: string) {
   const prefix = title
     .replace(/[^a-zA-Z]/g, "")
@@ -1695,12 +2080,62 @@ function readError(error: unknown) {
         ? String(error.message)
         : "";
 
+  if (isMapSchemaError(error)) {
+    return "Schema mappe Supabase non applicato. Esegui supabase/schema.sql o le migration mappe nel SQL Editor di Supabase.";
+  }
+
   if (message.includes("public.users") || message.includes("schema cache") || message.includes("PGRST205")) {
     return "Login riuscito, ma manca lo schema database. Esegui supabase/schema.sql nel SQL Editor di Supabase.";
   }
 
   if (message) return message;
   return "Operazione non riuscita. Controlla schema Supabase e permessi RLS.";
+}
+
+function isMapSchemaError(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error && "message" in error
+        ? String(error.message)
+        : "";
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("maps") ||
+    normalized.includes("map_") ||
+    normalized.includes("map character") ||
+    normalized.includes("schema cache") && normalized.includes("map")
+  );
+}
+
+function createLocalNarrativeMap(
+  room: Room,
+  profileId: string,
+  values: { title: string; description: string; imageUrl: string; parentMapId?: string | null; levelType: NarrativeMap["level_type"]; isVisibleToPlayers: boolean },
+  imageUrl: string
+): NarrativeMap {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    campaign_id: room.campaign_id,
+    room_id: room.id,
+    parent_map_id: values.parentMapId ?? null,
+    title: values.title,
+    description: values.description,
+    image_url: imageUrl || values.imageUrl || demoRoomState.scene.image_url,
+    level_type: values.levelType,
+    is_active: false,
+    is_visible_to_players: values.isVisibleToPlayers,
+    created_by: profileId,
+    created_at: now,
+    updated_at: now
+  };
+}
+
+function upsertLocalMapPosition(positions: MapCharacterPosition[], position: MapCharacterPosition) {
+  return positions.some((item) => item.id === position.id)
+    ? positions.map((item) => (item.id === position.id ? position : item))
+    : [position, ...positions];
 }
 
 function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {

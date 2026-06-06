@@ -17,14 +17,15 @@ export function PlayerDrawer({ character, inventory, notes, privateMessages, onC
   const [content, setContent] = useState("");
 
   return (
-    <section className="grid gap-4 lg:grid-cols-3">
-      <article className="glass-panel rounded-lg p-4">
+    <section className="player-drawer-grid grid gap-4 lg:grid-cols-3">
+      <article className="player-tool-card glass-panel rounded-lg p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
           <Backpack size={17} className="text-brass" /> Inventario
         </div>
-        <div className="space-y-2">
+        <div className="player-inventory-grid">
           {characterItems.map((item) => (
-            <div key={item.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <div key={item.id} className="player-inventory-tile">
+              {item.image_url ? <span className="player-inventory-image" style={{ backgroundImage: `url(${item.image_url})` }} /> : <span className="player-inventory-image is-empty"><Backpack size={20} /></span>}
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-medium text-white">
                   {item.name} x{item.quantity}
@@ -34,10 +35,11 @@ export function PlayerDrawer({ character, inventory, notes, privateMessages, onC
               <p className="mt-1 text-xs leading-5 text-slate-300">{item.description}</p>
             </div>
           ))}
+          {!characterItems.length ? <p className="player-empty-copy">Nessun oggetto assegnato.</p> : null}
         </div>
       </article>
 
-      <article className="glass-panel rounded-lg p-4">
+      <article className="player-tool-card player-diary-card glass-panel rounded-lg p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
           <BookOpenText size={17} className="text-brass" /> Note personali
         </div>
@@ -57,17 +59,18 @@ export function PlayerDrawer({ character, inventory, notes, privateMessages, onC
             <Plus size={16} /> Aggiungi nota
           </button>
         </form>
-        <div className="space-y-2">
+        <div className="player-diary-list space-y-2">
           {characterNotes.map((note) => (
-            <div key={note.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <div key={note.id} className="player-diary-note">
               <p className="text-sm font-medium text-white">{note.title}</p>
               <p className="mt-1 text-xs leading-5 text-slate-300">{note.content}</p>
             </div>
           ))}
+          {!characterNotes.length ? <p className="player-empty-copy">Il diario e ancora vuoto.</p> : null}
         </div>
       </article>
 
-      <article className="glass-panel rounded-lg p-4">
+      <article className="player-tool-card glass-panel rounded-lg p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
           <MessageSquareLock size={17} className="text-brass" /> Privati
         </div>
