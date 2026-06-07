@@ -1,4 +1,5 @@
 "use client";
+// Force Vercel rebuild: map layout details header on top
 
 import { Compass, Copy, Crosshair, DoorOpen, Expand, Eye, EyeOff, Flag, ImageUp, Map, MapPinned, Minus, Move, Plus, RotateCcw, Ruler, Search, Trash2, UsersRound } from "lucide-react";
 import type React from "react";
