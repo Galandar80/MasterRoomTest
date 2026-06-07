@@ -418,6 +418,48 @@
   color: rgb(168 162 158);
 }
 
+/* Filtri Atmosfera Mappa */
+.map-filter-none {
+  filter: none;
+}
+.map-filter-night {
+  filter: saturate(0.65) hue-rotate(200deg) brightness(0.55) contrast(1.2);
+}
+.map-filter-vintage {
+  filter: sepia(0.8) contrast(0.95) brightness(0.85);
+}
+.map-filter-cinematic {
+  filter: contrast(1.3) saturate(1.15) brightness(0.8);
+}
+.map-filter-crimson {
+  filter: sepia(0.35) saturate(2) hue-rotate(-45deg) brightness(0.6) contrast(1.35);
+}
+
+/* Ping Animato Realtime */
+.map-ping-effect {
+  display: block;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 3.5px solid currentColor;
+  border-radius: 999px;
+  transform-origin: center;
+  animation: map-ping-anim 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+}
+
+@keyframes map-ping-anim {
+  0% {
+    transform: scale(0.1);
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
 @media (max-width: 768px) {
   .map-viewer {
     min-height: 28rem;
@@ -3881,17 +3923,25 @@ select.field:focus {
 }
 
 /* Layout griglia mappe in Fullscreen */
-.player-utility-modal--fullscreen .map-tool-panel > div:last-child {
+.player-utility-modal--fullscreen .map-tool-panel > .map-grid-master {
   flex: 1 !important;
   min-height: 0 !important;
   display: grid !important;
   gap: 1.5rem !important;
-  grid-template-columns: 18rem minmax(0, 1fr) 20rem !important;
+  grid-template-columns: 18rem minmax(0, 1fr) !important;
+}
+
+.player-utility-modal--fullscreen .map-tool-panel > .map-grid-player {
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: grid !important;
+  gap: 1.5rem !important;
+  grid-template-columns: minmax(0, 1fr) !important;
 }
 
 .player-utility-modal--fullscreen .map-canvas {
   max-height: none !important;
-  height: calc(100vh - 16rem) !important; /* Espansione massima in altezza */
+  height: calc(100vh - 22rem) !important; /* Espansione massima calibrata in altezza */
   border: 1px solid rgba(var(--color-brass-rgb), 0.22) !important;
   border-radius: 0.75rem !important;
   box-shadow: 
@@ -3899,23 +3949,23 @@ select.field:focus {
     inset 0 0 40px rgba(0, 0, 0, 0.8) !important;
 }
 
-/* Sidebar e Libreria Mappe ottimizzate per Fullscreen */
+/* Colonne e Libreria Mappe ottimizzate per Fullscreen */
 .player-utility-modal--fullscreen .map-library,
-.player-utility-modal--fullscreen .map-tool-sidebar {
-  background: rgba(var(--color-ink-900-rgb), 0.65) !important;
-  backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(var(--color-brass-rgb), 0.16) !important;
-  border-radius: 0.75rem !important;
-  height: calc(100vh - 16rem) !important;
+.player-utility-modal--fullscreen .map-content-col {
+  height: calc(100vh - 10rem) !important;
   overflow-y: auto !important;
 }
 
 .player-utility-modal--fullscreen .map-library {
+  background: rgba(var(--color-ink-900-rgb), 0.65) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(var(--color-brass-rgb), 0.16) !important;
+  border-radius: 0.75rem !important;
   padding: 1rem !important;
 }
 
-.player-utility-modal--fullscreen .map-tool-sidebar {
-  padding: 1.25rem !important;
+.player-utility-modal--fullscreen .map-content-col {
+  padding-right: 0.5rem;
 }
 
 /* Quando lo schermo è compresso (tablet/mobile), usiamo una visualizzazione a schede o a colonna singola ma con altezza gestita */
@@ -3924,13 +3974,12 @@ select.field:focus {
     padding: 1rem !important;
   }
   
-  .player-utility-modal--fullscreen .map-tool-panel > div:last-child {
+  .player-utility-modal--fullscreen .map-tool-panel > .map-grid-master {
     grid-template-columns: 1fr !important;
-    overflow-y: auto !important;
   }
   
   .player-utility-modal--fullscreen .map-library,
-  .player-utility-modal--fullscreen .map-tool-sidebar,
+  .player-utility-modal--fullscreen .map-content-col,
   .player-utility-modal--fullscreen .map-canvas {
     height: auto !important;
     max-height: none !important;
