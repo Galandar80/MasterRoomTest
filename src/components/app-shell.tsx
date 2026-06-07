@@ -1001,22 +1001,9 @@ export function AppShell() {
           imageUrl = videoUrl;
         }
         const updatedScene = await updateScene(supabase, sceneId, { ...values, imageUrl, videoUrl });
-        const sceneAssetUrl = updatedScene.media_type === "video" ? updatedScene.video_url || updatedScene.image_url : updatedScene.image_url;
-        if (sceneAssetUrl) {
-          const asset = await createMediaAsset(supabase, roomState.room.id, roomState.profile, {
-            title: updatedScene.title,
-            assetType: updatedScene.media_type === "video" ? "video" : "image",
-            url: sceneAssetUrl,
-            tags: ["scena"]
-          });
-          setRoomState((state) => ({ ...state, mediaAssets: [asset, ...state.mediaAssets.filter((item) => item.id !== asset.id)] }));
-        }
 
+        // Update scene state immediately so the UI reflects changes even if asset creation fails
         const isActiveScene = roomState.room.current_scene_id === sceneId;
-        if (isActiveScene && updatedScene.linked_audio_id && updatedScene.linked_audio_id !== roomState.room.current_audio_id) {
-          await updateCurrentScene(supabase, roomState.room.id, updatedScene.id, updatedScene.linked_audio_id);
-        }
-
         setRoomState((state) => {
           const updatedScenes = state.scenes.map((s) => (s.id === sceneId ? updatedScene : s));
           return {
@@ -1031,6 +1018,27 @@ export function AppShell() {
               : state.room
           };
         });
+
+        // Optional: sync audio if the active scene's linked audio changed
+        if (isActiveScene && updatedScene.linked_audio_id && updatedScene.linked_audio_id !== roomState.room.current_audio_id) {
+          await updateCurrentScene(supabase, roomState.room.id, updatedScene.id, updatedScene.linked_audio_id).catch(() => {});
+        }
+
+        // Optional: register asset in the media library (non-blocking – failures don't break scene update)
+        const sceneAssetUrl = updatedScene.media_type === "video" ? updatedScene.video_url || updatedScene.image_url : updatedScene.image_url;
+        if (sceneAssetUrl) {
+          try {
+            const asset = await createMediaAsset(supabase, roomState.room.id, roomState.profile, {
+              title: updatedScene.title,
+              assetType: updatedScene.media_type === "video" ? "video" : "image",
+              url: sceneAssetUrl,
+              tags: ["scena"]
+            });
+            setRoomState((state) => ({ ...state, mediaAssets: [asset, ...state.mediaAssets.filter((item) => item.id !== asset.id)] }));
+          } catch {
+            // Media asset registration is best-effort; don't fail the whole update
+          }
+        }
       } else {
         setRoomState((state) => {
           const mockScene: Scene = {
