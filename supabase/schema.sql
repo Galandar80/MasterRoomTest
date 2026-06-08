@@ -39,6 +39,9 @@ alter table public.rooms add column if not exists spotlight_visibility text not 
 alter table public.rooms add column if not exists spotlight_user_ids uuid[] not null default '{}';
 alter table public.rooms add column if not exists current_sound_effect_id uuid;
 alter table public.rooms add column if not exists sound_effect_started_at timestamptz;
+alter table public.rooms add column if not exists turn_enabled boolean not null default false;
+alter table public.rooms add column if not exists turn_order uuid[] not null default '{}';
+alter table public.rooms add column if not exists current_turn_index integer not null default 0;
 
 create table if not exists public.player_characters (
   id uuid primary key default gen_random_uuid(),

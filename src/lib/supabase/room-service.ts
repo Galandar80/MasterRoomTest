@@ -1287,6 +1287,23 @@ export async function updateRoomSpotlight(
   if (error) throw error;
 }
 
+export async function updateRoomTurnState(
+  supabase: DatabaseClient,
+  roomId: string,
+  values: { turnEnabled: boolean; turnOrder: string[]; currentTurnIndex: number }
+) {
+  const { error } = await supabase
+    .from("rooms")
+    .update({
+      turn_enabled: values.turnEnabled,
+      turn_order: values.turnOrder,
+      current_turn_index: values.currentTurnIndex
+    })
+    .eq("id", roomId);
+
+  if (error) throw error;
+}
+
 export async function updateCharacterByMaster(
   supabase: DatabaseClient,
   characterId: string,

@@ -44,6 +44,9 @@ export type Room = {
   spotlight_npc_id?: string | null;
   spotlight_visibility?: SpotlightVisibility;
   spotlight_user_ids?: string[];
+  turn_enabled?: boolean;
+  turn_order?: string[];
+  current_turn_index?: number;
 };
 
 export type Scene = {

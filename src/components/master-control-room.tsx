@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ArrowLeft, AudioLines, Bell, ChevronDown, ChevronUp, Eye, Film, ImageUp, Library, MapPinned, MessageSquareText, Pencil, Plus, Radio, Save, ScrollText, Send, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, X } from "lucide-react";
+import { Activity, ArrowLeft, AudioLines, Bell, ChevronDown, ChevronUp, Eye, Film, ImageUp, Library, ListOrdered, MapPinned, MessageSquareText, Pencil, Plus, Radio, Save, ScrollText, Send, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, X } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
 import type { AudioTrack, InventoryItem, MapCharacterPosition, MediaAsset, Message, NarrativeMap, Npc, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
@@ -68,11 +68,12 @@ type MasterControlRoomProps = {
   onDeleteSoundEffect: (effect: SoundEffect) => void | Promise<void>;
   onTriggerSoundEffect: (effect: SoundEffect) => void | Promise<void>;
   onStopSoundEffect: () => void | Promise<void>;
-  onCreateNpc: (values: { name: string; color: string; description: string; portraitUrl: string }) => void | Promise<void>;
+  onCreateNpc: (values: { name: string; color: string; description: string; portraitUrl: string; portraitFile?: File }) => void | Promise<void>;
   onDeleteNpc: (npc: Npc) => void | Promise<void>;
   onCreateInventoryItem: (characterId: string, values: { name: string; description: string; quantity: number; imageUrl: string; isPublic: boolean; masterNotes: string }) => void | Promise<void>;
   onDeleteInventoryItem: (item: InventoryItem) => void | Promise<void>;
   onUpdateChatPermissions: (values: { chatEnabled: boolean; mutedUserIds: string[] }) => void | Promise<void>;
+  onSaveRoomTurnState: (values: { turnEnabled: boolean; turnOrder: string[]; currentTurnIndex: number }) => void | Promise<void>;
   onCreateDiceRequest: (values: { diceCount?: number; diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void | Promise<void>;
   onDrawCard: (values: { deck: CardDeckType; targetUserId?: string | null; visibility: "public" | "private"; reason: string }) => void | Promise<void>;
   onUpdateSpotlight: (values: { npcId: string | null; visibility: "off" | "public" | "private"; userIds: string[] }) => void | Promise<void>;
@@ -131,6 +132,7 @@ export function MasterControlRoom({
   onCreateInventoryItem,
   onDeleteInventoryItem,
   onUpdateChatPermissions,
+  onSaveRoomTurnState,
   onCreateDiceRequest,
   onDrawCard,
   onUpdateSpotlight,
@@ -175,41 +177,112 @@ export function MasterControlRoom({
       <div className="pointer-events-none absolute inset-0 app-theme-bg bg-cover bg-center opacity-70" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_68%_20%,rgba(147,51,234,0.18),transparent_32rem),linear-gradient(90deg,rgba(2,3,7,0.82),rgba(3,4,9,0.62)_48%,rgba(2,3,7,0.88)),linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.78))]" />
       <header className="director-card relative z-10 rounded-xl p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="grid gap-4 md:grid-cols-3 md:items-stretch">
+          {/* Left panel: Info & Scene */}
+          <div className="flex gap-3 min-w-0">
             <button
               type="button"
               onClick={onBack}
-              className="director-icon-button"
+              className="director-icon-button h-10 w-10 shrink-0 self-start mt-1"
               title="Torna al menu"
               aria-label="Torna al menu"
             >
               <ArrowLeft size={18} />
             </button>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="director-kicker">
-                  <Radio size={13} /> Cabina di regia
-                </span>
-                <span className="rounded-md border border-emerald-400/25 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-200">
-                  Sessione Live
-                </span>
+            <div className="min-w-0 flex-1 flex flex-col justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="director-kicker">
+                    <Radio size={13} /> Cabina di regia
+                  </span>
+                  <span className="rounded-md border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                    Sessione Live
+                  </span>
+                </div>
+                <h1 className="mt-1.5 truncate font-serif text-2xl text-stone-100">{state.campaigns[0].title}</h1>
+                <p className="mt-0.5 text-xs text-stone-300">
+                  {state.room.name} · codice <span className="font-mono text-ember-100">{state.room.invite_code}</span>
+                </p>
               </div>
-              <h1 className="mt-2 truncate font-serif text-3xl text-stone-100">{state.campaigns[0].title}</h1>
-              <p className="mt-1 text-sm text-stone-300">
-                {state.room.name} · codice <span className="font-mono text-ember-100">{state.room.invite_code}</span>
-              </p>
+              <div className="mt-2.5 flex items-center gap-2 border-t border-white/5 pt-2">
+                <span className="text-[10px] uppercase font-bold text-brass tracking-wider">Scena Attiva:</span>
+                <span className="truncate text-xs font-medium text-stone-200">{state.scene.title}</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onOpenPlayerView}
-              className="director-toolbar-button"
-            >
-              <Eye size={16} /> Vista giocatore
-            </button>
+          {/* Middle panel: Audio */}
+          <div className="border-t border-white/10 pt-3 md:border-t-0 md:border-l md:border-white/10 md:pt-0 md:pl-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-brass tracking-wider flex items-center gap-1">
+                <AudioLines size={12} /> Audio Attuale
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveTool("audio")}
+                className="text-[10px] uppercase font-bold text-ember-200 hover:text-ember-100"
+              >
+                Gestisci
+              </button>
+            </div>
+            <div className="my-1.5 flex items-center gap-2.5 rounded-lg bg-black/30 p-2 min-h-[3rem]">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-violet-400/25 bg-violet-500/10 text-violet-100">
+                <AudioLines size={14} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <strong className="block truncate text-xs text-stone-100">{currentAudio.title}</strong>
+                <small className="text-[10px] text-emerald-300">{currentAudio.loop ? "Loop attivo" : "Loop spento"}</small>
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              {state.audioTracks.slice(0, 3).map((track) => (
+                <button
+                  key={track.id}
+                  type="button"
+                  onClick={() => onAudioChange(track)}
+                  className={`flex-1 truncate rounded bg-white/[0.04] border border-white/5 px-2 py-1 text-center text-[10px] text-stone-300 hover:border-ember-400/35 hover:bg-ember-500/10 transition ${track.id === currentAudio.id ? "border-ember-400/30 text-ember-100 bg-ember-500/5" : ""}`}
+                >
+                  {track.title}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right panel: Timeline sessione */}
+          <div className="border-t border-white/10 pt-3 md:border-t-0 md:border-l md:border-white/10 md:pt-0 md:pl-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-brass tracking-wider flex items-center gap-1">
+                <ScrollText size={12} /> Timeline sessione
+              </span>
+            </div>
+            <div className="mt-1.5 space-y-1 overflow-y-auto max-h-[4.5rem] pr-1 scrollbar-soft">
+              {(() => {
+                const recentMessages = [...state.messages, ...state.offMessages, ...state.privateMessages]
+                  .sort((a, b) => b.created_at.localeCompare(a.created_at))
+                  .slice(0, 3);
+                const timelineItems = [
+                  { id: `scene-${state.scene.id}`, label: "Scena attiva", detail: state.scene.title, created_at: state.scene.created_at },
+                  ...actionLog.slice(0, 3),
+                  ...recentMessages.map((message) => ({
+                    id: message.id,
+                    label: message.is_private ? "Sussurro" : message.channel === "off" ? "OFF GDR" : message.sender_display_name,
+                    detail: message.content,
+                    created_at: message.created_at
+                  }))
+                ]
+                  .sort((a, b) => b.created_at.localeCompare(a.created_at))
+                  .slice(0, 3);
+
+                return timelineItems.map((item) => (
+                  <div key={item.id} className="flex gap-2 text-[10px] leading-relaxed text-stone-400">
+                    <time className="text-stone-500 shrink-0 font-mono">{shortTime(item.created_at)}</time>
+                    <span className="truncate flex-1">
+                      <strong className="text-stone-300 font-medium">{item.label}</strong>: {item.detail}
+                    </span>
+                  </div>
+                ));
+              })()}
+            </div>
           </div>
         </div>
       </header>
@@ -402,6 +475,7 @@ export function MasterControlRoom({
           onCreateDiceRequest={onCreateDiceRequest}
           onDrawCard={onDrawCard}
           actionLog={actionLog}
+          onSaveRoomTurnState={onSaveRoomTurnState}
         />
       </div>
       <div className="relative z-20">
@@ -428,6 +502,235 @@ export function MasterControlRoom({
   );
 }
 
+function DirectorTurnManager({
+  state,
+  onSaveRoomTurnState
+}: {
+  state: RoomState;
+  onSaveRoomTurnState: (values: { turnEnabled: boolean; turnOrder: string[]; currentTurnIndex: number }) => void | Promise<void>;
+}) {
+  const turnOrder = state.room.turn_order || [];
+  const turnEnabled = state.room.turn_enabled || false;
+  const currentIndex = state.room.current_turn_index ?? 0;
+
+  const handleToggleTurns = () => {
+    const nextEnabled = !turnEnabled;
+    let nextOrder = [...turnOrder];
+    if (nextEnabled && nextOrder.length === 0) {
+      nextOrder = state.characters.map((c) => c.user_id).filter(Boolean);
+    }
+    onSaveRoomTurnState({
+      turnEnabled: nextEnabled,
+      turnOrder: nextOrder,
+      currentTurnIndex: currentIndex
+    });
+  };
+
+  const handleResetOrder = () => {
+    const defaultOrder = state.characters.map((c) => c.user_id).filter(Boolean);
+    onSaveRoomTurnState({
+      turnEnabled,
+      turnOrder: defaultOrder,
+      currentTurnIndex: 0
+    });
+  };
+
+  const handleMove = (index: number, direction: "up" | "down") => {
+    const newOrder = [...turnOrder];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex >= 0 && targetIndex < newOrder.length) {
+      const temp = newOrder[index];
+      newOrder[index] = newOrder[targetIndex];
+      newOrder[targetIndex] = temp;
+      onSaveRoomTurnState({
+        turnEnabled,
+        turnOrder: newOrder,
+        currentTurnIndex: currentIndex
+      });
+    }
+  };
+
+  const handleRemove = (userId: string) => {
+    const newOrder = turnOrder.filter((uid) => uid !== userId);
+    let nextIdx = currentIndex;
+    if (nextIdx >= newOrder.length && newOrder.length > 0) {
+      nextIdx = newOrder.length - 1;
+    }
+    onSaveRoomTurnState({
+      turnEnabled,
+      turnOrder: newOrder,
+      currentTurnIndex: nextIdx
+    });
+  };
+
+  const handleAdd = (userId: string) => {
+    const newOrder = [...turnOrder, userId];
+    onSaveRoomTurnState({
+      turnEnabled,
+      turnOrder: newOrder,
+      currentTurnIndex: currentIndex
+    });
+  };
+
+  const handleStep = (step: number) => {
+    const len = turnOrder.length;
+    if (len === 0) return;
+    const nextIdx = (currentIndex + step + len) % len;
+    onSaveRoomTurnState({
+      turnEnabled,
+      turnOrder,
+      currentTurnIndex: nextIdx
+    });
+  };
+
+  return (
+    <section className="director-rail-section director-turn-manager">
+      <h3 className="director-mini-title flex items-center justify-between">
+        <span className="flex items-center gap-1.5">
+          <ListOrdered size={15} /> Turni di gioco
+        </span>
+      </h3>
+      
+      <div className="flex items-center justify-between mt-3">
+        <span className="text-xs font-semibold text-stone-300">Turni attivi</span>
+        <button
+          type="button"
+          onClick={handleToggleTurns}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+            turnEnabled ? "bg-ember-500" : "bg-stone-700"
+          }`}
+          aria-label="Attiva turni di gioco"
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+              turnEnabled ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
+        </button>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Ordine Turni</span>
+          {state.characters.length > 0 && (
+            <button
+              type="button"
+              onClick={handleResetOrder}
+              className="text-[10px] text-brass hover:underline uppercase font-bold"
+            >
+              Reset Ordine
+            </button>
+          )}
+        </div>
+
+        {turnOrder.length === 0 ? (
+          <p className="text-xs italic text-stone-500">Nessun giocatore nell'ordine. Attiva i turni o premi Reset.</p>
+        ) : (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-soft">
+            {turnOrder.map((userId, idx) => {
+              const char = state.characters.find((c) => c.user_id === userId);
+              const name = char ? `${char.character_name} ${char.character_surname}`.trim() : "Giocatore";
+              const isCurrent = turnEnabled && currentIndex === idx;
+
+              return (
+                <div
+                  key={userId}
+                  className={`flex items-center justify-between rounded-lg border px-2.5 py-1.5 transition ${
+                    isCurrent
+                      ? "border-ember-500/50 bg-ember-500/10 text-white font-medium"
+                      : "border-white/5 bg-white/[0.02] text-stone-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-mono text-stone-500 w-4">{idx + 1}.</span>
+                    <span className="truncate text-xs">{name}</span>
+                    {isCurrent && (
+                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ember-500" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => handleMove(idx, "up")}
+                      className="p-0.5 text-stone-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Sposta su"
+                      aria-label="Sposta su"
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === turnOrder.length - 1}
+                      onClick={() => handleMove(idx, "down")}
+                      className="p-0.5 text-stone-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Sposta giù"
+                      aria-label="Sposta giù"
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(userId)}
+                      className="p-0.5 text-rose-400 hover:text-rose-300 ml-1"
+                      title="Rimuovi"
+                      aria-label="Rimuovi"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {turnEnabled && turnOrder.length > 0 && (
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => handleStep(-1)}
+              className="flex-1 rounded border border-white/10 bg-white/[0.04] py-1 text-center text-xs text-stone-300 hover:bg-white/[0.08]"
+            >
+              Precedente
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStep(1)}
+              className="flex-1 rounded bg-ember-500 py-1 text-center text-xs font-semibold text-ink-900 hover:bg-ember-400"
+            >
+              Prossimo Turno
+            </button>
+          </div>
+        )}
+
+        {(() => {
+          const currentOrderSet = new Set(turnOrder);
+          const missingChars = state.characters.filter((c) => c.user_id && !currentOrderSet.has(c.user_id));
+          if (missingChars.length === 0) return null;
+          return (
+            <div className="mt-3 border-t border-white/5 pt-2.5">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">Aggiungi all'ordine</label>
+              <div className="flex flex-wrap gap-1.5">
+                {missingChars.map((char) => (
+                  <button
+                    key={char.id}
+                    type="button"
+                    onClick={() => handleAdd(char.user_id)}
+                    className="rounded-md border border-brass/20 bg-brass/5 px-2 py-0.5 text-[10px] text-brass hover:bg-brass/10 transition"
+                  >
+                    + {char.character_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    </section>
+  );
+}
+
 function DirectorRightRail({
   state,
   identityId,
@@ -444,7 +747,8 @@ function DirectorRightRail({
   onDirectorEvent,
   onCreateDiceRequest,
   onDrawCard,
-  actionLog
+  actionLog,
+  onSaveRoomTurnState
 }: {
   state: RoomState;
   identityId: string;
@@ -462,12 +766,14 @@ function DirectorRightRail({
   onCreateDiceRequest: (values: { diceCount?: number; diceSides: number; reason: string; targetUserId?: string | null; visibility: "public" | "private" }) => void | Promise<void>;
   onDrawCard: (values: { deck: CardDeckType; targetUserId?: string | null; visibility: "public" | "private"; reason: string }) => void | Promise<void>;
   actionLog: { id: string; label: string; detail?: string; created_at: string }[];
+  onSaveRoomTurnState: (values: { turnEnabled: boolean; turnOrder: string[]; currentTurnIndex: number }) => void | Promise<void>;
 }) {
   const activeIdentity = identityId === "master" ? "Master / Narratore" : state.npcs.find((npc) => npc.id === identityId)?.name ?? "Master / Narratore";
   const masterAvatar = state.profile.username.slice(0, 1).toUpperCase();
 
   return (
     <aside className="director-right-rail grid content-start gap-4 rounded-xl p-3">
+      {/* 1. Pannello Master */}
       <section className="director-rail-section">
         <h2 className="director-section-title">
           <Sparkles size={15} /> Pannello Master
@@ -500,6 +806,7 @@ function DirectorRightRail({
         <p className="mt-3 text-xs text-stone-400">Identita attiva: <span className="text-stone-100">{activeIdentity}</span></p>
       </section>
 
+      {/* 2. Mission control */}
       <section className="director-rail-section">
         <h3 className="director-mini-title">Mission control</h3>
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -510,13 +817,13 @@ function DirectorRightRail({
         </div>
       </section>
 
-      <DirectorQuickMapPanel state={state} onOpenTool={onOpenTool} onSetActiveMap={onSetActiveMap} onUpdateMapCharacterPosition={onUpdateMapCharacterPosition} />
-      <DirectorRandomPanel state={state} onCreateDiceRequest={onCreateDiceRequest} onDrawCard={onDrawCard} />
-      <DirectorCuePanel onLaunch={onQuickCue} />
-      <DirectorEventBuilder state={state} onLaunch={onDirectorEvent} />
-      <DirectorTimelinePanel state={state} actionLog={actionLog} />
-      <DirectorRecapPanel state={state} currentAudio={currentAudio} actionLog={actionLog} />
+      {/* 3. Turni di gioco */}
+      <DirectorTurnManager state={state} onSaveRoomTurnState={onSaveRoomTurnState} />
 
+      {/* 4. Dadi e carte */}
+      <DirectorRandomPanel state={state} onCreateDiceRequest={onCreateDiceRequest} onDrawCard={onDrawCard} />
+
+      {/* 5. Scena */}
       <section className="director-rail-section">
         <h3 className="director-mini-title">Scena</h3>
         <button type="button" onClick={() => onOpenTool("scenes")} className="director-current-card mt-3">
@@ -532,26 +839,19 @@ function DirectorRightRail({
         </div>
       </section>
 
-      <section className="director-rail-section">
-        <h3 className="director-mini-title">Audio</h3>
-        <div className="director-current-card mt-3">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-violet-400/25 bg-violet-500/10 text-violet-100">
-            <AudioLines size={18} />
-          </span>
-          <span className="min-w-0">
-            <strong className="block truncate text-sm text-stone-100">{currentAudio.title}</strong>
-            <small className="text-xs text-emerald-300">{currentAudio.loop ? "Loop attivo" : "Loop spento"}</small>
-          </span>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {state.audioTracks.slice(0, 2).map((track) => (
-            <button key={track.id} type="button" onClick={() => onAudioChange(track)} className={`director-small-button ${track.id === currentAudio.id ? "is-warm" : ""}`}>
-              {track.title}
-            </button>
-          ))}
-        </div>
-      </section>
+      {/* 6. Mappa rapida */}
+      <DirectorQuickMapPanel state={state} onOpenTool={onOpenTool} onSetActiveMap={onSetActiveMap} onUpdateMapCharacterPosition={onUpdateMapCharacterPosition} />
 
+      {/* 7. Event builder */}
+      <DirectorEventBuilder state={state} onLaunch={onDirectorEvent} />
+
+      {/* 8. Cue di regia */}
+      <DirectorCuePanel onLaunch={onQuickCue} />
+
+      {/* 9. Recap finale */}
+      <DirectorRecapPanel state={state} currentAudio={currentAudio} actionLog={actionLog} />
+
+      {/* 10. Appunti rapidi */}
       <section className="director-rail-section">
         <h3 className="director-mini-title">Appunti rapidi</h3>
         <div className="mt-3 flex gap-2">
@@ -1635,12 +1935,13 @@ function NpcPanel({
   onDeleteNpc
 }: {
   state: RoomState;
-  onCreateNpc: (values: { name: string; color: string; description: string; portraitUrl: string }) => void | Promise<void>;
+  onCreateNpc: (values: { name: string; color: string; description: string; portraitUrl: string; portraitFile?: File }) => void | Promise<void>;
   onDeleteNpc: (npc: Npc) => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState("#84cc16");
   const [portraitUrl, setPortraitUrl] = useState("");
+  const [portraitFile, setPortraitFile] = useState<File | undefined>(undefined);
   const [description, setDescription] = useState("");
 
   return (
@@ -1653,21 +1954,43 @@ function NpcPanel({
         onSubmit={(event) => {
           event.preventDefault();
           if (!name.trim()) return;
-          onCreateNpc({ name: name.trim(), color, description: description.trim(), portraitUrl: portraitUrl.trim() });
+          onCreateNpc({ name: name.trim(), color, description: description.trim(), portraitUrl: portraitUrl.trim(), portraitFile });
           setName("");
           setPortraitUrl("");
+          setPortraitFile(undefined);
           setDescription("");
         }}
       >
         <input className="field px-3 py-2 text-sm" placeholder="Nome NPC" value={name} onChange={(event) => setName(event.target.value)} />
         <div className="grid gap-2 sm:grid-cols-[5rem_minmax(0,1fr)]">
           <input className="field h-10 px-2 py-1" aria-label="Colore NPC" type="color" value={color} onChange={(event) => setColor(event.target.value)} />
-          <input
-            className="field px-3 py-2 text-sm"
-            placeholder="Link portrait NPC"
-            value={portraitUrl}
-            onChange={(event) => setPortraitUrl(event.target.value)}
-          />
+          <div className="grid gap-2 grid-cols-2">
+            <input
+              className="field px-3 py-2 text-sm"
+              placeholder="Link portrait NPC"
+              value={portraitUrl}
+              onChange={(event) => {
+                setPortraitUrl(event.target.value);
+                if (event.target.value) setPortraitFile(undefined);
+              }}
+            />
+            <label className="flex items-center justify-center rounded-lg border border-dashed border-white/20 bg-white/[0.02] px-3 py-2 text-xs font-medium text-slate-300 hover:bg-white/[0.05] hover:border-white/30 cursor-pointer transition">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    setPortraitFile(file);
+                    setPortraitUrl("");
+                  }
+                }}
+              />
+              <ImageUp size={14} className="mr-1.5 shrink-0 text-brass" />
+              {portraitFile ? portraitFile.name : "Carica Foto"}
+            </label>
+          </div>
         </div>
         <textarea
           className="field min-h-20 resize-none px-3 py-2 text-sm"

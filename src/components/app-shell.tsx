@@ -61,6 +61,7 @@ import {
   deletePlayerCharacter,
   updateRoomChatPermissions,
   updateRoomSpotlight,
+  updateRoomTurnState,
   updateMessageContent,
   updateMessagePinned,
   upsertMapCharacterPosition,
@@ -373,7 +374,6 @@ export function AppShell() {
         "postgres_changes",
         { event: "*", schema: "public", table: "scenes", filter: `room_id=eq.${roomState.room.id}` },
         (payload) => {
-          console.log("[REALTIME scenes]", payload.eventType, "new.title:", (payload.new as Record<string, unknown>)?.title);
           setRoomState((state) => {
             const next = updateCollectionEvent(state, "scenes", payload, "created_at", false);
             return { ...next, scene: next.scenes.find((scene) => scene.id === next.room.current_scene_id) ?? next.scene };
@@ -721,8 +721,20 @@ export function AppShell() {
       }
     }
 
-    if (channel === "gdr" && explicitIdentityId === "player" && (roomState.room.chat_enabled === false || roomState.room.muted_user_ids?.includes(roomState.profile.id))) {
-      setError(roomState.room.chat_enabled === false ? "La chat comune e disattivata dal Master." : "Il Master ha disattivato la tua chat.");
+    const isPlayerTurn = !roomState.room.turn_enabled ||
+      (roomState.room.turn_order && roomState.room.turn_order[roomState.room.current_turn_index ?? 0] === roomState.profile.id);
+
+    if (channel === "gdr" && explicitIdentityId === "player" && (roomState.room.chat_enabled === false || roomState.room.muted_user_ids?.includes(roomState.profile.id) || !isPlayerTurn)) {
+      if (roomState.room.chat_enabled === false) {
+        setError("La chat comune è disattivata dal Master.");
+      } else if (roomState.room.muted_user_ids?.includes(roomState.profile.id)) {
+        setError("Il Master ha disattivato la tua chat.");
+      } else {
+        const activeUserId = roomState.room.turn_order && roomState.room.turn_order[roomState.room.current_turn_index ?? 0];
+        const activeCharacter = roomState.characters.find((c) => c.user_id === activeUserId);
+        const activeName = activeCharacter ? `${activeCharacter.character_name}` : "un altro giocatore";
+        setError(`Non è il tuo turno. Attendi che parli: ${activeName}`);
+      }
       return;
     }
 
@@ -1002,15 +1014,12 @@ export function AppShell() {
         if (values.mediaType === "video" && !imageUrl) {
           imageUrl = videoUrl;
         }
-        console.log("[updateMasterScene] calling updateScene DB with title:", values.title);
         const updatedScene = await updateScene(supabase, sceneId, { ...values, imageUrl, videoUrl });
-        console.log("[updateMasterScene] updateScene returned:", updatedScene?.title, updatedScene?.id);
 
         // Update scene state immediately so the UI reflects changes even if asset creation fails
         const isActiveScene = roomState.room.current_scene_id === sceneId;
         setRoomState((state) => {
           const updatedScenes = state.scenes.map((s) => (s.id === sceneId ? updatedScene : s));
-          console.log("[updateMasterScene] setRoomState — new title in state:", updatedScenes.find(s => s.id === sceneId)?.title);
           return {
             ...state,
             scene: state.scene.id === sceneId ? updatedScene : state.scene,
@@ -1045,7 +1054,6 @@ export function AppShell() {
           }
         }
       } else {
-        console.log("[updateMasterScene] DEMO/no-supabase path — updating local state only");
         setRoomState((state) => {
           const mockScene: Scene = {
             id: sceneId,
@@ -1293,13 +1301,17 @@ export function AppShell() {
     }
   }
 
-  async function createMasterNpc(values: { name: string; color: string; description: string; portraitUrl: string }) {
+  async function createMasterNpc(values: { name: string; color: string; description: string; portraitUrl: string; portraitFile?: File }) {
     if (!isCurrentMaster) return;
 
     try {
       setError("");
+      let portraitUrl = values.portraitUrl;
       if (supabase && !demoMode) {
-        const npc = await createNpc(supabase, roomState.room.id, values);
+        if (values.portraitFile) {
+          portraitUrl = await uploadPublicFile(supabase, "portraits", values.portraitFile, `rooms/${roomState.room.id}/portraits`);
+        }
+        const npc = await createNpc(supabase, roomState.room.id, { ...values, portraitUrl });
         setRoomState((state) => ({ ...state, npcs: [...state.npcs, npc] }));
       } else {
         setRoomState((state) => ({
@@ -1312,7 +1324,7 @@ export function AppShell() {
               name: values.name,
               color: values.color,
               description: values.description,
-              portrait_url: values.portraitUrl
+              portrait_url: portraitUrl
             }
           ]
         }));
@@ -1409,6 +1421,39 @@ export function AppShell() {
       setStatus("Permessi chat aggiornati");
     } catch (chatError) {
       setError(readError(chatError));
+    }
+  }
+
+  async function saveRoomTurnState(values: { turnEnabled: boolean; turnOrder: string[]; currentTurnIndex: number }) {
+    if (!isCurrentMaster) return;
+
+    try {
+      setError("");
+      if (supabase && !demoMode) {
+        await updateRoomTurnState(supabase, roomState.room.id, values);
+        setRoomState((state) => ({
+          ...state,
+          room: {
+            ...state.room,
+            turn_enabled: values.turnEnabled,
+            turn_order: values.turnOrder,
+            current_turn_index: values.currentTurnIndex
+          }
+        }));
+      } else {
+        setRoomState((state) => ({
+          ...state,
+          room: {
+            ...state.room,
+            turn_enabled: values.turnEnabled,
+            turn_order: values.turnOrder,
+            current_turn_index: values.currentTurnIndex
+          }
+        }));
+      }
+      setStatus("Stato turni aggiornato");
+    } catch (turnError) {
+      setError(readError(turnError));
     }
   }
 
@@ -2237,6 +2282,7 @@ export function AppShell() {
           onCreateInventoryItem={addInventoryItem}
           onDeleteInventoryItem={removeInventoryItem}
           onUpdateChatPermissions={saveChatPermissions}
+          onSaveRoomTurnState={saveRoomTurnState}
           onCreateDiceRequest={requestDice}
           onDrawCard={drawNarrativeCard}
           onUpdateSpotlight={saveSpotlight}

@@ -63,9 +63,23 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
   const visibleDiceRequests = state.diceRequests.filter((request) => !request.target_user_id || request.target_user_id === state.profile.id);
   const spotlightVisible = state.room.spotlight_visibility !== "off" && Boolean(state.room.spotlight_npc_id);
   const soundEffectVisible = Boolean(state.room.current_sound_effect_id);
-  const chatDisabledForPlayer = state.room.chat_enabled === false || Boolean(state.room.muted_user_ids?.includes(state.profile.id));
-  const disabledReason =
-    state.room.chat_enabled === false ? "Chat comune disattivata dal Master" : "Il Master ha disattivato la tua chat";
+  const isPlayerTurn = !state.room.turn_enabled || 
+    (state.room.turn_order && state.room.turn_order[state.room.current_turn_index ?? 0] === state.profile.id);
+
+  const chatDisabledForPlayer = state.room.chat_enabled === false || 
+    Boolean(state.room.muted_user_ids?.includes(state.profile.id)) ||
+    !isPlayerTurn;
+
+  const disabledReason = state.room.chat_enabled === false 
+    ? "Chat comune disattivata dal Master" 
+    : state.room.muted_user_ids?.includes(state.profile.id)
+      ? "Il Master ha disattivato la tua chat"
+      : (() => {
+          const activeUserId = state.room.turn_order && state.room.turn_order[state.room.current_turn_index ?? 0];
+          const activeCharacter = state.characters.find((c) => c.user_id === activeUserId);
+          const activeName = activeCharacter ? `${activeCharacter.character_name} ${activeCharacter.character_surname}`.trim() : "un altro giocatore";
+          return `Non è il tuo turno. Attendi che parli: ${activeName}`;
+        })();
 
   return (
     <section className={`player-room-shell relative -m-4 min-h-screen overflow-hidden px-3 py-3 sm:-m-6 sm:px-4 sm:py-4 ${immersiveMode ? "is-immersive" : ""}`}>
