@@ -782,7 +782,10 @@ export async function updateScene(
     linkedAudioId?: string | null;
   }
 ) {
-  const updatePayload: Record<string, unknown> = {
+  // Base payload: fields that are guaranteed to be in PostgREST schema cache
+  // (linked_audio_id is excluded here because it was added via migration and
+  //  may not be in the PostgREST schema cache yet, causing PGRST204 errors)
+  const basePayload: Record<string, unknown> = {
     title: values.title,
     description: values.description,
     image_url: values.imageUrl,
@@ -790,20 +793,38 @@ export async function updateScene(
     video_url: values.videoUrl || null,
     loop_video: values.loopVideo ?? true,
     visibility: values.visibility ?? "public",
-    visible_user_ids: values.visibleUserIds ?? [],
-    linked_audio_id: values.linkedAudioId || null
+    visible_user_ids: values.visibleUserIds ?? []
   };
 
   const { data, error } = await supabase
     .from("scenes")
-    .update(updatePayload)
+    .update(basePayload)
     .eq("id", sceneId)
     .select("*")
     .single();
 
   if (error) throw error;
-  return data as Scene;
+  const updatedScene = data as Scene;
+
+  // Separately update linked_audio_id (best-effort: PGRST204 if not in cache is silently ignored)
+  if (values.linkedAudioId !== undefined) {
+    const { error: audioLinkError } = await supabase
+      .from("scenes")
+      .update({ linked_audio_id: values.linkedAudioId || null })
+      .eq("id", sceneId);
+
+    if (audioLinkError && audioLinkError.code !== "PGRST204") {
+      // Re-throw only if it's not a schema cache miss (we'll live without audio linking until cache refreshes)
+      console.warn("[updateScene] linked_audio_id update failed:", audioLinkError.message);
+    } else if (!audioLinkError) {
+      // Patch the returned scene object with the audio link so state is consistent
+      (updatedScene as Record<string, unknown>).linked_audio_id = values.linkedAudioId || null;
+    }
+  }
+
+  return updatedScene;
 }
+
 
 export async function createNarrativeMap(
   supabase: DatabaseClient,

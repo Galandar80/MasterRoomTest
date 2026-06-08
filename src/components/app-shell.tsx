@@ -373,6 +373,7 @@ export function AppShell() {
         "postgres_changes",
         { event: "*", schema: "public", table: "scenes", filter: `room_id=eq.${roomState.room.id}` },
         (payload) => {
+          console.log("[REALTIME scenes]", payload.eventType, "new.title:", (payload.new as Record<string, unknown>)?.title);
           setRoomState((state) => {
             const next = updateCollectionEvent(state, "scenes", payload, "created_at", false);
             return { ...next, scene: next.scenes.find((scene) => scene.id === next.room.current_scene_id) ?? next.scene };
@@ -990,6 +991,7 @@ export function AppShell() {
       setError("");
       let imageUrl = values.imageUrl;
       let videoUrl = values.videoUrl ?? "";
+      console.log("[updateMasterScene] START — sceneId:", sceneId, "title:", values.title, "supabase:", !!supabase, "demoMode:", demoMode, "isCurrentMaster:", isCurrentMaster);
       if (supabase && !demoMode) {
         if (values.imageFile) {
           imageUrl = await uploadPublicFile(supabase, "scene-images", values.imageFile, `rooms/${roomState.room.id}/scenes`);
@@ -1000,12 +1002,15 @@ export function AppShell() {
         if (values.mediaType === "video" && !imageUrl) {
           imageUrl = videoUrl;
         }
+        console.log("[updateMasterScene] calling updateScene DB with title:", values.title);
         const updatedScene = await updateScene(supabase, sceneId, { ...values, imageUrl, videoUrl });
+        console.log("[updateMasterScene] updateScene returned:", updatedScene?.title, updatedScene?.id);
 
         // Update scene state immediately so the UI reflects changes even if asset creation fails
         const isActiveScene = roomState.room.current_scene_id === sceneId;
         setRoomState((state) => {
           const updatedScenes = state.scenes.map((s) => (s.id === sceneId ? updatedScene : s));
+          console.log("[updateMasterScene] setRoomState — new title in state:", updatedScenes.find(s => s.id === sceneId)?.title);
           return {
             ...state,
             scene: state.scene.id === sceneId ? updatedScene : state.scene,
@@ -1035,11 +1040,12 @@ export function AppShell() {
               tags: ["scena"]
             });
             setRoomState((state) => ({ ...state, mediaAssets: [asset, ...state.mediaAssets.filter((item) => item.id !== asset.id)] }));
-          } catch {
-            // Media asset registration is best-effort; don't fail the whole update
+          } catch (assetErr) {
+            console.warn("[updateMasterScene] createMediaAsset failed (non-blocking):", assetErr);
           }
         }
       } else {
+        console.log("[updateMasterScene] DEMO/no-supabase path — updating local state only");
         setRoomState((state) => {
           const mockScene: Scene = {
             id: sceneId,
@@ -1065,6 +1071,7 @@ export function AppShell() {
       }
       setStatus("Scena modificata");
     } catch (sceneError) {
+      console.error("[updateMasterScene] ERROR:", sceneError);
       setError(readError(sceneError));
     }
   }
