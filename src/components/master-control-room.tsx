@@ -286,13 +286,13 @@ export function MasterControlRoom({
               </div>
             </div>
 
-            <div className="flex gap-1.5">
-              {state.audioTracks.slice(0, 3).map((track) => (
+            <div className="flex flex-wrap gap-1.5">
+              {state.audioTracks.map((track) => (
                 <button
                   key={track.id}
                   type="button"
                   onClick={() => onAudioChange(track)}
-                  className={`flex-1 truncate rounded bg-white/[0.04] border border-white/5 px-2 py-1 text-center text-[10px] text-stone-300 hover:border-ember-400/35 hover:bg-ember-500/10 transition ${track.id === currentAudio.id ? "border-ember-400/30 text-ember-100 bg-ember-500/5" : ""}`}
+                  className={`min-w-[70px] max-w-[150px] truncate rounded bg-white/[0.04] border border-white/5 px-2 py-1 text-center text-[10px] text-stone-300 hover:border-ember-400/35 hover:bg-ember-500/10 transition ${track.id === currentAudio.id ? "border-ember-400/30 text-ember-100 bg-ember-500/5" : ""}`}
                 >
                   {track.title}
                 </button>
@@ -533,9 +533,11 @@ export function MasterControlRoom({
       <div className="relative z-20">
         <AudioPlayer
           track={currentAudio}
-          externalVolume={audioVolume}
+          status={state.room.audio_status}
+          onStatusChange={(status) => onSaveRoomAudioState({ audioStatus: status, audioVolume: state.room.audio_volume ?? 55 })}
+          externalVolume={state.room.audio_volume ?? 55}
+          onVolumeChange={(volume) => onSaveRoomAudioState({ audioStatus: state.room.audio_status ?? "playing", audioVolume: volume })}
           externalMuted={audioMuted}
-          onVolumeChange={setAudioVolume}
           onMutedChange={setAudioMuted}
         />
       </div>

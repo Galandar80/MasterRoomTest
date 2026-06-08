@@ -12,9 +12,10 @@ type AudioPlayerProps = {
   onVolumeChange?: (vol: number) => void;
   onMutedChange?: (muted: boolean) => void;
   status?: string; // 'playing' | 'paused' | 'stopped'
+  onStatusChange?: (status: string) => void;
 };
 
-export function AudioPlayer({ track, autoStart = true, externalVolume, externalMuted, onVolumeChange, onMutedChange, status = "playing" }: AudioPlayerProps) {
+export function AudioPlayer({ track, autoStart = true, externalVolume, externalMuted, onVolumeChange, onMutedChange, status = "playing", onStatusChange }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const outgoingAudioRef = useRef<HTMLAudioElement>(null);
   const fadeTimerRef = useRef<number | null>(null);
@@ -140,6 +141,12 @@ export function AudioPlayer({ track, autoStart = true, externalVolume, externalM
   async function togglePlayback() {
     const audio = audioRef.current;
     if (!audio || !activeTrack.audio_url) return;
+
+    if (onStatusChange) {
+      const nextStatus = status === "playing" ? "paused" : "playing";
+      onStatusChange(nextStatus);
+      return;
+    }
 
     if (playing) {
       audio.pause();
