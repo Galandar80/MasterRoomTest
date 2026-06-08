@@ -787,12 +787,12 @@ function DirectorRightRail({
             </option>
           ))}
         </select>
-        <div className="mt-4 flex items-start gap-3 overflow-x-auto pb-1">
+        <div className="mt-4 flex flex-wrap items-start gap-3 pb-1">
           <button type="button" onClick={() => onIdentityChange("master")} className={`director-identity-token ${identityId === "master" ? "is-active" : ""}`}>
             <span>{masterAvatar}</span>
             <small>Master</small>
           </button>
-          {state.npcs.slice(0, 4).map((npc) => (
+          {state.npcs.slice(0, 12).map((npc) => (
             <button key={npc.id} type="button" onClick={() => onIdentityChange(npc.id)} className={`director-identity-token ${identityId === npc.id ? "is-active" : ""}`}>
               <span style={npc.portrait_url ? { backgroundImage: `url(${npc.portrait_url})` } : { color: npc.color }}>{npc.portrait_url ? "" : npc.name.slice(0, 1)}</span>
               <small>{npc.name}</small>
