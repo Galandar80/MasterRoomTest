@@ -624,7 +624,7 @@ function DirectorTurnManager({
         </div>
 
         {turnOrder.length === 0 ? (
-          <p className="text-xs italic text-stone-500">Nessun giocatore nell'ordine. Attiva i turni o premi Reset.</p>
+          <p className="text-xs italic text-stone-500">{"Nessun giocatore nell'ordine. Attiva i turni o premi Reset."}</p>
         ) : (
           <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-soft">
             {turnOrder.map((userId, idx) => {
@@ -710,7 +710,7 @@ function DirectorTurnManager({
           if (missingChars.length === 0) return null;
           return (
             <div className="mt-3 border-t border-white/5 pt-2.5">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">Aggiungi all'ordine</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">{"Aggiungi all'ordine"}</label>
               <div className="flex flex-wrap gap-1.5">
                 {missingChars.map((char) => (
                   <button
