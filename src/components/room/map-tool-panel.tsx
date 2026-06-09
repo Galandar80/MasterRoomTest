@@ -3,7 +3,7 @@
 
 import { Compass, Copy, Crosshair, DoorOpen, Expand, Eye, EyeOff, Flag, ImageUp, Map, MapPinned, Minus, Move, Plus, RotateCcw, Ruler, Search, Trash2, UsersRound } from "lucide-react";
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Character, MapCharacterPosition, MapCustomMarker, MapHotspot, MapNpcMarker, MapFogArea, NarrativeMap, Npc, RoomState } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 
@@ -463,27 +463,17 @@ function MapViewer({
     return () => window.removeEventListener("click", closeMenu);
   }, []);
 
-  // Se giocatore, richiedi lo stato della mappa corrente all'ingresso
-  useEffect(() => {
-    if (!isMaster) {
-      const timer = setTimeout(() => {
-        broadcastEvent("request-map-state", {});
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [isMaster, map.id]);
-
   // Rilascia un ping visuale sulla mappa
-  const triggerPing = (payload: { x: number; y: number; color: string }) => {
+  const triggerPing = useCallback((payload: { x: number; y: number; color: string }) => {
     const id = Math.random().toString(36).substring(2, 9);
     setPings((current) => [...current, { id, ...payload }]);
     setTimeout(() => {
       setPings((current) => current.filter((p) => p.id !== id));
     }, 3000);
-  };
+  }, []);
 
   // Broadcast degli eventi a impatto DB ZERO
-  const broadcastEvent = (event: string, payload: any) => {
+  const broadcastEvent = useCallback((event: string, payload: any) => {
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("local-map-broadcast", {
         detail: { event, payload }
@@ -496,7 +486,17 @@ function MapViewer({
         payload
       });
     }
-  };
+  }, [supabase]);
+
+  // Se giocatore, richiedi lo stato della mappa corrente all'ingresso
+  useEffect(() => {
+    if (!isMaster) {
+      const timer = setTimeout(() => {
+        broadcastEvent("request-map-state", {});
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [broadcastEvent, isMaster, map.id]);
 
   // Iscrizione ai canali di rete
   useEffect(() => {
@@ -569,7 +569,7 @@ function MapViewer({
         supabase.removeChannel(mapChannelRef.current);
       }
     };
-  }, [supabase, map.room_id, isMaster]);
+  }, [broadcastEvent, isMaster, map.room_id, supabase, triggerPing]);
 
   // Rilevamento automatico del meteo (Solo per il Master, che poi lo trasmette)
   useEffect(() => {
@@ -587,7 +587,7 @@ function MapViewer({
     }
     setWeather(detectedWeather);
     broadcastEvent("map-state", { weather: detectedWeather, atmosphere: atmosphereRef.current });
-  }, [map.id, map.title, map.description, isMaster]);
+  }, [broadcastEvent, isMaster, map.id, map.title, map.description]);
 
   // Motore particellare meteo sul Canvas
   useEffect(() => {

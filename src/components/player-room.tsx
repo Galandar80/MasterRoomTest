@@ -75,18 +75,19 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
 
   const [leftCharacters, rightCharacters] = useMemo(() => splitSides(state.characters), [state.characters]);
   const currentCharacter = state.characters.find((character) => character.user_id === state.profile.id) ?? state.characters[0];
+  const currentCharacterHp = currentCharacter?.hp;
 
   useEffect(() => {
-    if (currentCharacter) {
-      if (prevHpRef.current !== undefined && currentCharacter.hp < prevHpRef.current) {
+    if (currentCharacterHp !== undefined) {
+      if (prevHpRef.current !== undefined && currentCharacterHp < prevHpRef.current) {
         import("@/lib/sound-generator").then((mod) => mod.playUiDamage());
         setDamageFlash(true);
         const timer = setTimeout(() => setDamageFlash(false), 900);
         return () => clearTimeout(timer);
       }
-      prevHpRef.current = currentCharacter.hp;
+      prevHpRef.current = currentCharacterHp;
     }
-  }, [currentCharacter?.hp]);
+  }, [currentCharacterHp]);
   const visibleDiceRequests = state.diceRequests.filter((request) => !request.target_user_id || request.target_user_id === state.profile.id);
   const spotlightVisible = state.room.spotlight_visibility !== "off" && Boolean(state.room.spotlight_npc_id);
   const soundEffectVisible = Boolean(state.room.current_sound_effect_id);
@@ -916,6 +917,7 @@ function PlayerActionHotbar({
             max="100"
             value={localMuted ? 0 : localVolume}
             onChange={(e) => {
+              onMutedChange(false);
               onVolumeChange(Number(e.target.value));
             }}
             className="w-16 h-1 accent-brass bg-stone-700 rounded-lg appearance-none cursor-pointer"

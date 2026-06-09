@@ -4874,3 +4874,337 @@ select.field:focus {
   background-repeat: no-repeat !important;
   background-position: center !important;
 }
+
+/* ==========================================================================
+   Static AAA art direction pass
+   ========================================================================== */
+
+:where(
+  .glass-panel,
+  .director-tool-panel,
+  .director-create-panel,
+  .director-rail-section,
+  .director-live-message,
+  .director-current-card,
+  .master-command-panel,
+  .story-chat-panel,
+  .off-chat-panel,
+  .private-thread-panel,
+  .player-room-header,
+  .player-utility-modal,
+  .player-tool-card,
+  .player-audio-dock,
+  .soundbar-modal,
+  .scene-stage,
+  .map-tool-panel
+) {
+  border-color: rgba(var(--color-brass-rgb), 0.24) !important;
+  background:
+    linear-gradient(180deg, rgba(17, 19, 26, 0.92), rgba(6, 7, 11, 0.97)),
+    radial-gradient(circle at 14% 0%, rgba(var(--color-brass-rgb), 0.08), transparent 18rem),
+    radial-gradient(circle at 86% 100%, rgba(45, 212, 191, 0.045), transparent 20rem) !important;
+  box-shadow:
+    0 22px 58px rgba(0, 0, 0, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025) !important;
+}
+
+:where(
+  .glass-panel,
+  .director-tool-panel,
+  .director-create-panel,
+  .director-rail-section,
+  .master-command-panel,
+  .story-chat-panel,
+  .player-utility-modal,
+  .player-tool-card,
+  .soundbar-modal
+) {
+  border-radius: 0.75rem !important;
+}
+
+:where(.glass-panel, .ui-panel-window, .story-chat-panel, .master-command-panel, .player-utility-modal) {
+  outline: 1px solid rgba(255, 255, 255, 0.018);
+  outline-offset: -3px;
+}
+
+:where(.director-tool-heading, .director-form-title, .story-chat-header, .master-panel-header, .social-panel-header) {
+  border-bottom: 1px solid rgba(var(--color-brass-rgb), 0.16);
+  background:
+    linear-gradient(90deg, rgba(var(--color-brass-rgb), 0.075), transparent 52%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent);
+}
+
+:where(.director-tool-heading, .master-panel-header, .social-panel-header) {
+  margin: -1rem -1rem 1rem;
+  padding: 1rem;
+}
+
+:where(.director-tool-heading h2, .master-panel-header h3, .social-panel-header h3, .director-form-title h2) {
+  color: #f8e4b8;
+  line-height: 1.12;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
+}
+
+:where(.director-tool-heading p, .director-form-title p, .player-session-kicker, .story-message-type) {
+  color: #d7ad5b;
+  letter-spacing: 0.13em;
+}
+
+:where(.director-tool-emblem, .player-logo-mark, .chat-message-avatar) {
+  border-color: rgba(var(--color-brass-rgb), 0.34) !important;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 247, 237, 0.18), transparent 28%),
+    radial-gradient(circle, rgba(var(--color-brass-rgb), 0.22), transparent 62%),
+    linear-gradient(180deg, rgba(27, 22, 17, 0.98), rgba(8, 8, 11, 0.98)) !important;
+  box-shadow:
+    0 0 24px rgba(var(--color-brass-rgb), 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+}
+
+:where(
+  .director-scene-card,
+  .director-audio-card,
+  .director-inventory-card,
+  .director-media-card,
+  .director-character-selector,
+  .director-character-dossier,
+  .player-character-card,
+  .player-item-card,
+  .player-inventory-tile,
+  .player-note-card,
+  .player-active-map-card,
+  .player-header-action,
+  .player-info-tile,
+  .player-current-strip,
+  .player-public-item,
+  .story-message,
+  .social-message,
+  .off-chat-message,
+  .private-thread-message
+) {
+  border-color: rgba(255, 255, 255, 0.075);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.014)),
+    linear-gradient(135deg, rgba(var(--color-brass-rgb), 0.035), transparent 42%),
+    rgba(4, 5, 9, 0.42);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+:where(
+  .director-scene-card,
+  .director-audio-card,
+  .director-inventory-card,
+  .director-media-card,
+  .director-character-selector,
+  .player-character-card,
+  .player-item-card,
+  .player-inventory-tile,
+  .player-note-card,
+  .player-active-map-card,
+  .player-header-action,
+  .story-message
+):hover {
+  border-color: rgba(var(--color-brass-rgb), 0.34);
+  background:
+    linear-gradient(180deg, rgba(var(--color-brass-rgb), 0.075), rgba(255, 255, 255, 0.016)),
+    rgba(9, 10, 15, 0.62);
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.34),
+    0 0 24px rgba(var(--color-brass-rgb), 0.075),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+:where(.director-scene-card.is-current, .director-audio-card.is-current, .director-inventory-card.is-public) {
+  border-color: rgba(251, 191, 36, 0.5) !important;
+  background:
+    linear-gradient(180deg, rgba(251, 191, 36, 0.105), rgba(255, 255, 255, 0.018)),
+    radial-gradient(circle at 0% 0%, rgba(251, 191, 36, 0.12), transparent 12rem),
+    rgba(7, 8, 12, 0.7) !important;
+}
+
+.director-scene-thumb,
+.player-character-card img,
+.player-active-map-card img,
+.scene-stage img {
+  background:
+    linear-gradient(135deg, rgba(var(--color-brass-rgb), 0.08), rgba(45, 212, 191, 0.04)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(0, 0, 0, 0.18));
+}
+
+:where(.director-scene-thumb, .player-character-card img, .player-active-map-card img) {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 12px 26px rgba(0, 0, 0, 0.34);
+}
+
+:where(.director-empty-state, .story-empty-state, .player-modal-empty, .player-rail-empty, .social-empty-state, .player-empty-copy) {
+  min-height: 9.5rem;
+  border: 1px dashed rgba(var(--color-brass-rgb), 0.28) !important;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(var(--color-brass-rgb), 0.105), transparent 9rem),
+    radial-gradient(circle at 50% 100%, rgba(45, 212, 191, 0.055), transparent 10rem),
+    rgba(255, 255, 255, 0.022) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025),
+    inset 0 16px 36px rgba(255, 255, 255, 0.018);
+}
+
+:where(.director-empty-state svg, .story-empty-state svg, .player-modal-empty svg, .player-rail-empty svg) {
+  filter: drop-shadow(0 0 14px rgba(var(--color-brass-rgb), 0.34));
+}
+
+:where(.director-empty-state p, .story-empty-state p, .player-modal-empty p) {
+  color: #f7e7c2 !important;
+  line-height: 1.25;
+}
+
+:where(.director-empty-state span, .story-empty-state span, .player-modal-empty span, .player-empty-copy) {
+  color: rgba(226, 232, 240, 0.72) !important;
+}
+
+.story-message {
+  overflow: hidden;
+}
+
+.story-message::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035), transparent 18%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 44%);
+  opacity: 0.72;
+}
+
+.story-message > * {
+  position: relative;
+  z-index: 1;
+}
+
+.story-message--master {
+  border-color: rgba(251, 191, 36, 0.42) !important;
+}
+
+.story-message--npc {
+  border-color: rgba(167, 139, 250, 0.36) !important;
+}
+
+.story-message--player {
+  border-color: rgba(96, 165, 250, 0.2);
+}
+
+.story-message--dice {
+  border-color: rgba(45, 212, 191, 0.4) !important;
+}
+
+.story-message--private {
+  border-color: rgba(249, 115, 22, 0.4) !important;
+}
+
+:where(.field, input, textarea, select) {
+  text-shadow: none;
+}
+
+:where(.field, input, textarea, select):focus-visible,
+:where(button, a, [role="button"], summary):focus-visible {
+  outline: 2px solid rgba(251, 191, 36, 0.64) !important;
+  outline-offset: 2px !important;
+  box-shadow:
+    0 0 0 4px rgba(251, 191, 36, 0.12),
+    0 0 26px rgba(251, 191, 36, 0.18) !important;
+}
+
+:where(.field, input, textarea, select)::placeholder {
+  color: rgba(226, 232, 240, 0.42);
+}
+
+.ui-hotbar-panel {
+  gap: 0.55rem !important;
+  scroll-padding: 0.8rem !important;
+}
+
+.ui-hotbar-panel .ui-btn-fantasy {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+}
+
+.ui-btn-fantasy svg,
+.player-header-action svg,
+.director-nav-link svg,
+.director-session-button svg {
+  flex-shrink: 0;
+}
+
+.director-nav-link {
+  min-height: 3rem;
+  border-color: rgba(255, 255, 255, 0.035);
+  background:
+    linear-gradient(90deg, rgba(var(--color-brass-rgb), 0.025), transparent 48%),
+    rgba(255, 255, 255, 0.012);
+}
+
+.director-nav-link:hover,
+.director-nav-link.is-active {
+  border-color: rgba(var(--color-brass-rgb), 0.36);
+  background:
+    linear-gradient(90deg, rgba(var(--color-brass-rgb), 0.16), rgba(122, 49, 9, 0.08), transparent),
+    rgba(255, 255, 255, 0.025);
+}
+
+:where(.director-status-tile, .player-info-tile) {
+  overflow: hidden;
+}
+
+:where(.director-status-tile strong, .player-info-tile strong, .player-current-strip strong, .director-scene-card strong) {
+  overflow-wrap: anywhere;
+}
+
+:where(.scrollbar-soft, .story-chat-panel, .master-command-panel, .player-utility-modal, textarea)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+:where(.scrollbar-soft, .story-chat-panel, .master-command-panel, .player-utility-modal, textarea)::-webkit-scrollbar-track {
+  background: rgba(3, 4, 7, 0.82);
+}
+
+:where(.scrollbar-soft, .story-chat-panel, .master-command-panel, .player-utility-modal, textarea)::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(3, 4, 7, 0.82);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(var(--color-brass-rgb), 0.6), rgba(122, 49, 9, 0.74));
+}
+
+@media (max-width: 768px) {
+  :where(.ui-panel-window, .glass-panel, .director-tool-panel, .player-utility-modal) {
+    padding: 1rem !important;
+  }
+
+  :where(.director-tool-heading, .master-panel-header, .social-panel-header) {
+    margin: -1rem -1rem 0.9rem;
+    padding: 0.9rem 1rem;
+  }
+
+  .director-scene-card {
+    grid-template-columns: minmax(0, 1fr) 2.5rem !important;
+  }
+
+  .director-scene-thumb {
+    grid-column: 1 / -1;
+  }
+
+  .player-room-header,
+  .player-character-card {
+    border-radius: 0.8rem !important;
+  }
+
+  .ui-hotbar-panel {
+    left: 0.75rem !important;
+    right: 0.75rem !important;
+    max-width: calc(100vw - 1.5rem) !important;
+    transform: none !important;
+  }
+}

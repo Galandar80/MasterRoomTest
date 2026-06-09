@@ -40,7 +40,7 @@ export function SceneStage({ scene, compact = false, audioVolume = 55, audioMute
   useEffect(() => {
     const detected = detectWeather(displayScene);
     setWeather(detected);
-  }, [displayScene.id]);
+  }, [displayScene]);
 
   useEffect(() => {
     if (scene.id !== displayScene.id) {
