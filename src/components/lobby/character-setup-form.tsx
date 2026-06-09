@@ -282,9 +282,9 @@ export function CharacterSetupForm({ defaultName, onBack, onCreate }: CharacterS
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-6.5xl gap-5 py-4">
+    <div className="mx-auto grid w-full max-w-6.5xl gap-5 py-4 p-4 text-white">
       {/* Top Selection Strip - Fluid Grid for 10 items */}
-      <section className="glass-panel rounded-xl border border-white/10 bg-black/40 p-4">
+      <section className="ui-panel-window rounded-xl relative shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3 mb-4">
           <button
             type="button"
@@ -293,7 +293,7 @@ export function CharacterSetupForm({ defaultName, onBack, onCreate }: CharacterS
               playUiClick();
               onBack();
             }}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-stone-300 hover:bg-white/[0.08]"
+            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-stone-300 hover:bg-white/[0.08] hover:text-white transition"
           >
             <ArrowLeft size={16} /> Indietro
           </button>
@@ -327,31 +327,28 @@ export function CharacterSetupForm({ defaultName, onBack, onCreate }: CharacterS
 
       <div className="grid gap-5 lg:grid-cols-[1fr_1.5fr]">
         {/* Left Side: Avatar Card */}
-        <aside className="relative overflow-hidden rounded-xl border-2 border-double border-brass/40 bg-ink-950 p-6 shadow-[0_0_20px_rgba(200,163,93,0.15)] flex flex-col justify-between min-h-[30rem]">
-          <div className="absolute left-1 top-1 h-3 w-3 border-l border-t border-brass/50" />
-          <div className="absolute right-1 top-1 h-3 w-3 border-r border-t border-brass/50" />
-          <div className="absolute left-1 bottom-1 h-3 w-3 border-l border-b border-brass/50" />
-          <div className="absolute right-1 bottom-1 h-3 w-3 border-r border-b border-brass/50" />
+        <aside className="relative overflow-hidden rounded-xl border border-brass/25 bg-black/60 p-6 flex flex-col justify-between min-h-[30rem] shadow-2xl">
+          <div className="absolute left-1 top-1 h-3 w-3 border-l border-t border-brass/40" />
+          <div className="absolute right-1 top-1 h-3 w-3 border-r border-t border-brass/40" />
+          <div className="absolute left-1 bottom-1 h-3 w-3 border-l border-b border-brass/40" />
+          <div className="absolute right-1 bottom-1 h-3 w-3 border-r border-b border-brass/40" />
 
           <div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brass/20 bg-brass/10 text-brass">
-              <UserRoundPlus size={18} />
-            </div>
-            <h1 className="mt-4 font-serif text-2xl font-semibold tracking-wide text-white">Anteprima Eroe</h1>
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">
+            <h1 className="font-serif text-xl font-bold uppercase tracking-wider text-brass">Anteprima Eroe</h1>
+            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400">
               Personalizza il tuo avatar e la tua combinazione di colori per differenziarti visivamente sul tabellone del Master.
             </p>
           </div>
 
           <div className="my-6 flex flex-col items-center justify-center">
             {values.portraitUrl ? (
-              <div className="relative h-48 w-48 overflow-hidden rounded-xl border-2 border-brass/40 bg-black/40 shadow-xl">
+              <div className="relative h-48 w-48 overflow-hidden rounded-xl border border-brass/20 bg-black/40 shadow-xl ui-portrait-rectangular">
                 <div
                   className="h-full w-full bg-cover bg-center transition-transform duration-700 hover:scale-105"
                   style={{ backgroundImage: `url(${values.portraitUrl})` }}
                 />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brass border border-brass/20">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                <span className="absolute bottom-2 left-2 rounded bg-black/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brass border border-brass/25">
                   {selectedArchId}
                 </span>
               </div>
@@ -381,7 +378,7 @@ export function CharacterSetupForm({ defaultName, onBack, onCreate }: CharacterS
 
         {/* Right Side: Setup Form */}
         <form
-          className="glass-panel grid gap-4 rounded-xl border border-white/10 bg-black/30 p-6"
+          className="ui-panel-window grid gap-4 rounded-xl p-8 relative shadow-2xl"
           onSubmit={(event) => {
             event.preventDefault();
             setIsSaving(true);
@@ -553,7 +550,7 @@ export function CharacterSetupForm({ defaultName, onBack, onCreate }: CharacterS
           <button
             type="submit"
             onMouseEnter={playUiHover}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-ember-500 px-4 py-3.5 font-bold uppercase tracking-wider text-ink-900 transition hover:bg-ember-400 hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-ember-900/20"
+            className="w-full flex items-center justify-center gap-2 ui-btn-fantasy py-3.5"
           >
             <UserRoundPlus size={18} /> {isSaving ? "Ingresso in Camera..." : "Completa Eroe ed Entra in Gioco"}
           </button>

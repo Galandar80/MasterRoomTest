@@ -45,39 +45,42 @@ export function CreateGameForm({ state, onBack, onCreate }: CreateGameFormProps)
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-      <aside className="glass-panel rounded-lg p-5">
+    <section className="mx-auto grid w-full max-w-6xl items-start gap-5 p-4 lg:grid-cols-[0.9fr_1.1fr]">
+      <aside className="ui-panel-window self-start rounded-xl p-8 flex flex-col gap-4 text-white shadow-2xl relative">
         <button
           type="button"
           onClick={onBack}
-          className="mb-5 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white hover:bg-white/[0.08]"
+          className="self-start inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-stone-300 hover:bg-white/[0.08] hover:text-white transition"
         >
           <ArrowLeft size={16} /> Menu
         </button>
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-brass/25 bg-brass/10 text-brass">
-          <Clapperboard size={22} />
-        </div>
-        <h1 className="mt-4 text-3xl font-semibold text-white">Crea partita</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-300">
-          Questo flusso prepara campagna, stanza e scena iniziale. Alla conferma entrerai direttamente nella cabina di regia.
+        
+        <h1 className="mt-2 text-2xl font-serif font-bold uppercase tracking-wider text-brass">
+          Crea partita
+        </h1>
+        <p className="text-xs leading-relaxed text-stone-400">
+          Questo flusso prepara la campagna, la stanza virtuale e la scena iniziale del capitolo. Alla conferma entrerai direttamente nella cabina di regia del Master.
         </p>
-        <div className="mt-6 rounded-lg border border-ember-400/20 bg-ember-500/10 p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-ember-100">
-            <Copy size={16} /> Codice stanza
+
+        <div className="mt-4 rounded-lg border border-amber-600/30 bg-amber-950/15 p-4 relative overflow-hidden">
+          <div className="flex items-center gap-2 text-xs font-serif font-bold uppercase tracking-wider text-brass">
+            <Copy size={14} /> Codice stanza invito
           </div>
-          <p className="mt-2 font-mono text-2xl font-semibold text-white">{values.inviteCode || "AUTO"}</p>
-          <p className="mt-2 text-xs leading-5 text-ember-100/80">I giocatori useranno questo codice per entrare nella sessione.</p>
+          <p className="mt-2 font-mono text-3xl font-bold text-stone-100">{values.inviteCode || "AUTO"}</p>
+          <p className="mt-1.5 text-[10px] leading-relaxed text-stone-400">
+            I giocatori useranno questo codice per accedere come eroi a questa sessione di gioco.
+          </p>
         </div>
       </aside>
 
       <form
-        className="glass-panel grid gap-5 rounded-lg p-5"
+        className="ui-panel-window grid gap-5 rounded-xl p-8 text-white shadow-2xl relative"
         onSubmit={(event) => {
           event.preventDefault();
           onCreate(values);
         }}
       >
-        <FormSection icon={<Sparkles size={17} />} title="Campagna">
+        <FormSection icon={<Sparkles size={14} />} title="La Campagna">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Titolo campagna" value={values.campaignTitle} onChange={(value) => update("campaignTitle", value)} />
             <Field label="Genere" value={values.genre} onChange={(value) => update("genre", value)} />
@@ -93,12 +96,12 @@ export function CreateGameForm({ state, onBack, onCreate }: CreateGameFormProps)
           />
         </FormSection>
 
-        <FormSection icon={<Copy size={17} />} title="Stanza">
+        <FormSection icon={<Copy size={14} />} title="Stanza di Gioco">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Nome stanza" value={values.roomName} onChange={(value) => update("roomName", value)} />
             <Field label="Codice invito" value={values.inviteCode} onChange={(value) => update("inviteCode", value.toUpperCase())} />
           </div>
-          <label className="grid gap-2 text-sm text-slate-200">
+          <label className="grid gap-2 text-xs font-serif font-bold uppercase tracking-wider text-slate-300">
             Numero giocatori disponibili
             <input
               className="field px-3 py-2"
@@ -111,7 +114,7 @@ export function CreateGameForm({ state, onBack, onCreate }: CreateGameFormProps)
           </label>
         </FormSection>
 
-        <FormSection icon={<ImageIcon size={17} />} title="Scena iniziale">
+        <FormSection icon={<ImageIcon size={14} />} title="Scena Iniziale">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Titolo scena" value={values.sceneTitle} onChange={(value) => update("sceneTitle", value)} />
             <Field label="URL immagine scena" value={values.sceneImageUrl} onChange={(value) => update("sceneImageUrl", value)} />
@@ -126,8 +129,8 @@ export function CreateGameForm({ state, onBack, onCreate }: CreateGameFormProps)
           <Field label="Descrizione scena" value={values.sceneDescription} onChange={(value) => update("sceneDescription", value)} textarea />
         </FormSection>
 
-        <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-ember-500 px-4 py-3 font-semibold text-ink-900 hover:bg-ember-400">
-          <Clapperboard size={18} /> Crea e apri cabina di regia
+        <button className="w-full flex items-center justify-center gap-2 ui-btn-fantasy py-3.5">
+          <Clapperboard size={16} /> Crea e apri cabina di regia
         </button>
       </form>
     </section>
@@ -148,9 +151,9 @@ function FileField({
   onChange: (file?: File) => void;
 }) {
   return (
-    <label className="grid gap-2 text-sm text-slate-200">
+    <label className="grid gap-2 text-xs font-serif font-bold uppercase tracking-wider text-slate-300">
       {label}
-      <span className="rounded-lg border border-dashed border-brass/30 bg-brass/5 px-3 py-3 text-center text-xs text-brass">
+      <span className="rounded-lg border border-dashed border-brass/35 bg-black/45 px-3 py-3 text-center text-xs text-brass cursor-pointer hover:bg-brass/5 transition">
         {file ? file.name : hint}
         <input className="sr-only" type="file" accept={accept} onChange={(event) => onChange(event.target.files?.[0])} />
       </span>
@@ -161,10 +164,11 @@ function FileField({
 function FormSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-brass">
+      <h2 className="flex items-center gap-2 text-xs font-serif font-bold uppercase tracking-[0.18em] text-brass">
         {icon} {title}
       </h2>
       {children}
+      <div className="ui-divider-ornate my-2 opacity-50" />
     </section>
   );
 }
@@ -181,12 +185,12 @@ function Field({
   textarea?: boolean;
 }) {
   return (
-    <label className="grid gap-2 text-sm text-slate-200">
+    <label className="grid gap-2 text-xs font-serif font-bold uppercase tracking-wider text-slate-300">
       {label}
       {textarea ? (
-        <textarea className="field min-h-24 resize-none px-3 py-2" value={value} onChange={(event) => onChange(event.target.value)} />
+        <textarea className="field min-h-24 resize-none px-3 py-2 font-sans text-sm font-normal normal-case" value={value} onChange={(event) => onChange(event.target.value)} />
       ) : (
-        <input className="field px-3 py-2" value={value} onChange={(event) => onChange(event.target.value)} />
+        <input className="field px-3 py-2 font-sans text-sm font-normal normal-case" value={value} onChange={(event) => onChange(event.target.value)} />
       )}
     </label>
   );

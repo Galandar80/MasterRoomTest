@@ -11,5 +11,7 @@ tsconfig.tsbuildinfo
 Backup
 .agents
 .codex
+.supabase
+supabase/.temp
 skills-lock.json
 Migliorie.txt

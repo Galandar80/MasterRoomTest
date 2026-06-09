@@ -35,6 +35,8 @@ export function AuthGate({ children }: AuthGateProps) {
   useEffect(() => {
     if (!supabase) return;
 
+    let active = true;
+
     async function initializeAuth() {
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
@@ -49,7 +51,12 @@ export function AuthGate({ children }: AuthGateProps) {
       if (code) {
         setIsBusy(true);
         setMessage("Completamento accesso Google...");
-        const { data, error } = await supabase!.auth.exchangeCodeForSession(code);
+        const { data, error } = await withAuthTimeout(
+          supabase!.auth.exchangeCodeForSession(code),
+          "Google ha risposto, ma il completamento accesso non ha risposto in tempo. Riprova."
+        );
+
+        if (!active) return;
 
         if (error) {
           setMessage(readAuthError(error.message));
@@ -65,7 +72,13 @@ export function AuthGate({ children }: AuthGateProps) {
       }
 
       try {
-        const { data, error } = await supabase!.auth.getSession();
+        const { data, error } = await withAuthTimeout(
+          supabase!.auth.getSession(),
+          "Controllo sessione non riuscito in tempo. Puoi accedere di nuovo."
+        );
+
+        if (!active) return;
+
         if (error) {
           throw error;
         }
@@ -91,11 +104,15 @@ export function AuthGate({ children }: AuthGateProps) {
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!active) return;
       setIsAuthed(Boolean(session));
       setIsBusy(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, [supabase]);
 
   async function handleAuth(event: React.FormEvent<HTMLFormElement>) {
@@ -321,4 +338,13 @@ function isInvalidRefreshTokenError(error: unknown) {
 
 function readUnknownError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function withAuthTimeout<T>(promise: Promise<T>, message: string) {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), 6000);
+    })
+  ]);
 }

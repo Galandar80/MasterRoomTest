@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import type React from "react";
-import { ArrowLeft, Backpack, BookOpenText, CircleHelp, Copy, Eye, EyeOff, MapPinned, MessageCircle, Plus, ScrollText, UsersRound, X, UserRound, Lock, BookOpen, Heart, Sparkles, Bell, Check, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Backpack, BookOpenText, CircleHelp, Copy, Eye, EyeOff, MapPinned, MessageCircle, Plus, ScrollText, UsersRound, X, UserRound, Lock, BookOpen, Heart, Sparkles, Bell, Check, ShieldAlert, Volume2, VolumeX } from "lucide-react";
 import type { AudioTrack, Message, RoomState } from "@/lib/types";
 import { splitSides } from "@/lib/utils";
 import { AudioPlayer } from "@/components/room/audio-player";
@@ -45,6 +45,33 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
   const [immersiveMode, setImmersiveMode] = useState(false);
   const [damageFlash, setDamageFlash] = useState(false);
   const prevHpRef = useRef<number | undefined>(undefined);
+  
+  // Lifted local audio states
+  const [localVolume, setLocalVolume] = useState<number>(55);
+  const [localMuted, setLocalMuted] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedVol = localStorage.getItem("gdr_local_volume");
+      const savedMuted = localStorage.getItem("gdr_local_muted");
+      if (savedVol !== null) setLocalVolume(Number(savedVol));
+      if (savedMuted !== null) setLocalMuted(savedMuted === "true");
+    }
+  }, []);
+
+  const handleLocalVolumeChange = (vol: number) => {
+    setLocalVolume(vol);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gdr_local_volume", String(vol));
+    }
+  };
+
+  const handleLocalMutedChange = (muted: boolean) => {
+    setLocalMuted(muted);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gdr_local_muted", String(muted));
+    }
+  };
 
   const [leftCharacters, rightCharacters] = useMemo(() => splitSides(state.characters), [state.characters]);
   const currentCharacter = state.characters.find((character) => character.user_id === state.profile.id) ?? state.characters[0];
@@ -194,7 +221,10 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
         <AudioPlayer 
           track={currentAudio} 
           status={state.room.audio_status}
-          externalVolume={state.room.audio_volume}
+          externalVolume={localVolume}
+          externalMuted={localMuted}
+          onVolumeChange={handleLocalVolumeChange}
+          onMutedChange={handleLocalMutedChange}
         />
       </div>
 
@@ -224,6 +254,10 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
         immersiveMode={immersiveMode}
         onToggleImmersive={() => setImmersiveMode((value) => !value)}
         onOpenUtility={setUtilityPanel}
+        localVolume={localVolume}
+        localMuted={localMuted}
+        onVolumeChange={handleLocalVolumeChange}
+        onMutedChange={handleLocalMutedChange}
       />
     </section>
   );
@@ -708,6 +742,10 @@ type PlayerActionHotbarProps = {
   immersiveMode: boolean;
   onToggleImmersive: () => void;
   onOpenUtility: (panel: Exclude<UtilityPanel, null>) => void;
+  localVolume: number;
+  localMuted: boolean;
+  onVolumeChange: (vol: number) => void;
+  onMutedChange: (muted: boolean) => void;
 };
 
 function PlayerActionHotbar({
@@ -720,7 +758,11 @@ function PlayerActionHotbar({
   inviteCode,
   immersiveMode,
   onToggleImmersive,
-  onOpenUtility
+  onOpenUtility,
+  localVolume,
+  localMuted,
+  onVolumeChange,
+  onMutedChange
 }: PlayerActionHotbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -733,7 +775,7 @@ function PlayerActionHotbar({
   const totalNotifications = visibleDiceRequests.length + (spotlightVisible ? 1 : 0);
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 flex items-center gap-3 rounded-full border border-white/10 bg-ink-950/90 px-4 py-2.5 shadow-2xl shadow-black/80 backdrop-blur-lg transition-all duration-300">
+    <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 flex items-center gap-3 ui-hotbar-panel shadow-2xl transition-all duration-300">
       
       {/* 🔔 Notifications Hub */}
       <div className="relative">
@@ -849,6 +891,37 @@ function PlayerActionHotbar({
         >
           <BookOpenText size={14} />
         </button>
+      </div>
+
+      <div className="h-4 w-px bg-white/10" />
+
+      {/* 🔊 Local Audio Volume & Mute Controls */}
+      <div className="relative flex items-center gap-1.5 group">
+        <button
+          type="button"
+          onClick={() => {
+            onMutedChange(!localMuted);
+            playUiClick();
+          }}
+          onMouseEnter={playUiHover}
+          className={`flex h-8 w-8 items-center justify-center rounded-full transition ${localMuted ? "text-rose-400 bg-rose-500/10 hover:bg-rose-500/20" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+          title={localMuted ? "Riattiva audio locale" : "Muta audio locale"}
+        >
+          {localMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+        </button>
+        <div className="w-0 overflow-hidden group-hover:w-20 transition-all duration-300 ease-in-out flex items-center">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={localMuted ? 0 : localVolume}
+            onChange={(e) => {
+              onVolumeChange(Number(e.target.value));
+            }}
+            className="w-16 h-1 accent-brass bg-stone-700 rounded-lg appearance-none cursor-pointer"
+            aria-label="Volume locale"
+          />
+        </div>
       </div>
 
       <div className="h-4 w-px bg-white/10" />

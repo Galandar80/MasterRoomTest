@@ -19,9 +19,9 @@ export function JoinRoomForm({ room, onBack, onJoin }: JoinRoomFormProps) {
   const [isJoining, setIsJoining] = useState(false);
 
   return (
-    <section className="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-3xl items-center">
-      <form
-        className="glass-panel w-full rounded-lg p-5 sm:p-7"
+    <section className="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-xl items-center p-4">
+      <div
+        className="ui-panel-window w-full rounded-xl p-8 relative flex flex-col gap-4 text-white shadow-2xl"
         onSubmit={(event) => {
           event.preventDefault();
           setIsJoining(true);
@@ -33,51 +33,78 @@ export function JoinRoomForm({ room, onBack, onJoin }: JoinRoomFormProps) {
         <button
           type="button"
           onClick={onBack}
-          className="mb-6 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white hover:bg-white/[0.08]"
+          className="self-start inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-stone-300 hover:bg-white/[0.08] hover:text-white transition"
         >
           <ArrowLeft size={16} /> Menu
         </button>
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-brass/25 bg-brass/10 text-brass">
-          <KeyRound size={22} />
-        </div>
-        <h1 className="mt-4 text-3xl font-semibold text-white">Entra in una stanza</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-300">
-          Inserisci il codice stanza. Se hai creato tu la partita puoi rientrare come Master, altrimenti entra come giocatore.
+
+        <h1 className="mt-2 text-2xl font-serif font-bold uppercase tracking-wider text-brass">
+          Entra in stanza
+        </h1>
+        <p className="text-xs leading-relaxed text-slate-400">
+          Inserisci il codice stanza fornito dal Master. Puoi rientrare come Master della sessione o unirti come eroe della campagna.
         </p>
 
-        <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-black/20 p-1">
+        <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-white/5 bg-black/45 p-1">
           <button
             type="button"
             onClick={() => setMode("player")}
-            className={`rounded-md px-3 py-2 text-sm font-medium ${mode === "player" ? "bg-ember-500 text-ink-900" : "text-slate-300"}`}
+            className={`rounded px-3 py-2 text-xs font-serif font-bold uppercase tracking-wider transition duration-150 ${
+              mode === "player"
+                ? "bg-brass/25 text-brass border border-brass/45"
+                : "bg-transparent text-stone-400 border border-transparent hover:text-white"
+            }`}
           >
             Giocatore
           </button>
           <button
             type="button"
             onClick={() => setMode("master")}
-            className={`rounded-md px-3 py-2 text-sm font-medium ${mode === "master" ? "bg-ember-500 text-ink-900" : "text-slate-300"}`}
+            className={`rounded px-3 py-2 text-xs font-serif font-bold uppercase tracking-wider transition duration-150 ${
+              mode === "master"
+                ? "bg-brass/25 text-brass border border-brass/45"
+                : "bg-transparent text-stone-400 border border-transparent hover:text-white"
+            }`}
           >
             Master
           </button>
         </div>
 
-        <label className="mt-4 grid gap-2 text-sm text-slate-200">
-          Codice stanza
+        <label className="mt-2 grid gap-2 text-xs font-serif font-bold uppercase tracking-wider text-slate-300">
+          Codice invito stanza
           <input
-            className="field px-4 py-4 font-mono text-xl uppercase"
+            className="field px-4 py-3.5 font-mono text-xl uppercase text-center"
             value={code}
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             placeholder="VEY-R03"
           />
         </label>
 
-        {error ? <p className="mt-3 rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</p> : null}
+        {error ? (
+          <p className="mt-2 rounded-lg border border-rose-450/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+            {error}
+          </p>
+        ) : null}
 
-        <button className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ember-500 px-4 py-3 font-semibold text-ink-900 hover:bg-ember-400">
-          <DoorOpen size={18} /> {isJoining ? "Controllo codice..." : mode === "master" ? "Rientra come Master" : "Entra come giocatore"}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            setIsJoining(true);
+            Promise.resolve(onJoin(code, mode))
+              .then((joined) => setError(joined ? "" : "Codice stanza non trovato."))
+              .finally(() => setIsJoining(false));
+          }}
+          className="mt-4 w-full flex items-center justify-center gap-2 ui-btn-fantasy py-3"
+        >
+          <DoorOpen size={16} />{" "}
+          {isJoining
+            ? "Verifica codice..."
+            : mode === "master"
+              ? "Rientra come Master"
+              : "Entra come eroe"}
         </button>
-      </form>
+      </div>
     </section>
   );
 }

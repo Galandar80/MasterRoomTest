@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, CornerUpLeft, Crown, Dice5, MessageCircle, Pencil, Pin, Search, Send, Shield, Trash2, UserRound, VenetianMask, X } from "lucide-react";
+import { Check, CornerUpLeft, Crown, Dice5, Heart, Lock, MessageCircle, Pencil, Pin, Search, Send, Shield, Trash2, UserRound, VenetianMask, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Character, ChatFilter, DiceRequest, Message, Npc, RoomTyping } from "@/lib/types";
 import { cn, shortTime } from "@/lib/utils";
+import { parseCharacterMetadata } from "@/lib/character-metadata";
 
 const TECHNICAL_MESSAGE_PREFIXES = ["__gdr_map_sync__:"];
 
@@ -61,6 +62,86 @@ export function ChatPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [activeProfile, setActiveProfile] = useState<{
+    name: string;
+    avatarUrl: string;
+    color: string;
+    isNpc: boolean;
+    npcId?: string | null;
+    userId?: string | null;
+    archetype?: string;
+    origin?: string;
+    traits?: string[];
+    alignment?: string;
+    religion?: string;
+    appearance?: string;
+    bond?: string;
+    bio?: string;
+    secret?: string;
+    hp?: number;
+    mentalState?: string;
+    conditions?: string[];
+  } | null>(null);
+
+  const handleAvatarClick = (msg: Message) => {
+    import("@/lib/sound-generator").then((mod) => {
+      mod.playUiClick();
+      mod.playUiModalOpen();
+    });
+
+    if (msg.sender_type === "npc" && msg.npc_id) {
+      const npc = npcs.find((item) => item.id === msg.npc_id);
+      setActiveProfile({
+        name: npc?.name ?? msg.sender_display_name,
+        avatarUrl: npc?.portrait_url ?? "",
+        color: npc?.color ?? msg.sender_color,
+        isNpc: true,
+        npcId: msg.npc_id,
+        bio: npc?.description ?? "Nessun dettaglio aggiuntivo per questo NPC."
+      });
+    } else if (msg.sender_type === "player" && msg.sender_user_id) {
+      const char = characters.find((item) => item.user_id === msg.sender_user_id);
+      if (char) {
+        const meta = parseCharacterMetadata(char.public_background);
+        setActiveProfile({
+          name: `${char.character_name} ${char.character_surname}`.trim(),
+          avatarUrl: char.portrait_url ?? "",
+          color: char.color ?? msg.sender_color,
+          isNpc: false,
+          userId: msg.sender_user_id,
+          archetype: meta.archetype || "Personalizzato",
+          origin: meta.origin || "Strada",
+          traits: meta.traits || [],
+          alignment: meta.alignment || "Neutrale",
+          religion: char.visible_status || "Nessuno",
+          appearance: meta.appearance || "",
+          bond: meta.bond || "",
+          bio: meta.bio || "",
+          secret: meta.private_secret || "",
+          hp: char.hp,
+          mentalState: char.mental_state || "Stabile",
+          conditions: char.conditions || []
+        });
+      } else {
+        setActiveProfile({
+          name: msg.sender_display_name,
+          avatarUrl: "",
+          color: msg.sender_color,
+          isNpc: false,
+          userId: msg.sender_user_id,
+          bio: "Profilo del giocatore. I dettagli della scheda non sono disponibili in questa sessione."
+        });
+      }
+    } else {
+      setActiveProfile({
+        name: msg.sender_display_name,
+        avatarUrl: "",
+        color: msg.sender_color,
+        isNpc: false,
+        bio: msg.sender_type === "master" ? "Il Game Master che conduce la narrazione di questa campagna." : "Messaggio di sistema."
+      });
+    }
+  };
 
   const visibleMessages = useMemo(() => messages.filter((message) => !isTechnicalMessage(message)), [messages]);
   const latestOwnMessageId = [...visibleMessages].reverse().find((message) => message.sender_user_id === currentUserId)?.id;
@@ -290,13 +371,15 @@ export function ChatPanel({
               )}
             >
               {showAvatars ? (
-                <div
-                  className="chat-message-avatar"
+                <button
+                  type="button"
+                  onClick={() => handleAvatarClick(message)}
+                  className="chat-message-avatar ui-portrait-circular cursor-pointer transition-transform hover:scale-105 active:scale-95 outline-none focus:scale-105"
                   style={avatar.url ? { backgroundImage: `url(${avatar.url})`, color: message.sender_color } : { color: message.sender_color }}
-                  aria-hidden="true"
+                  aria-label={`Visualizza profilo di ${message.sender_display_name}`}
                 >
                   {avatar.url ? "" : avatar.fallback}
-                </div>
+                </button>
               ) : null}
               <div className="min-w-0">
                 <div className="story-message-top flex flex-wrap items-baseline justify-between gap-2">
@@ -521,6 +604,167 @@ export function ChatPanel({
           </button>
         </div>
       </form>
+
+      {/* Finestra Dettagli Personaggio / NPC in Overlay */}
+      {activeProfile && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="ui-panel-window w-full max-w-3xl overflow-hidden rounded-xl border border-brass/25 text-white shadow-2xl relative">
+            
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => {
+                import("@/lib/sound-generator").then((mod) => {
+                  mod.playUiClick();
+                  mod.playUiModalClose();
+                });
+                setActiveProfile(null);
+              }}
+              className="absolute right-4 top-4 text-stone-400 hover:text-white transition duration-150 p-1"
+              aria-label="Chiudi"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Header */}
+            <header className="pr-8">
+              <span className="text-[10px] uppercase font-serif font-bold text-brass tracking-widest">
+                {activeProfile.isNpc ? "Personaggio Non Giocante (NPC)" : "Personaggio Giocante (Eroe)"}
+              </span>
+              <h2 className="font-serif text-3xl font-bold tracking-wide mt-1" style={{ color: activeProfile.color }}>
+                {activeProfile.name}
+              </h2>
+              {activeProfile.archetype && (
+                <p className="text-xs text-stone-400 font-serif italic mt-0.5">{activeProfile.archetype}</p>
+              )}
+            </header>
+
+            {/* Divider */}
+            <div className="ui-divider-ornate" />
+
+            {/* Modal Body */}
+            <div className="grid gap-6 md:grid-cols-[13rem_1fr] mt-2">
+              {/* Left Column: Portrait & Stats */}
+              <div className="flex flex-col items-center gap-3">
+                <div className="ui-portrait-rectangular h-52 w-52 rounded-xl bg-cover bg-center overflow-hidden bg-black/50 border border-brass/20 shadow-lg">
+                  {activeProfile.avatarUrl ? (
+                    <div 
+                      className="h-full w-full bg-cover bg-center" 
+                      style={{ backgroundImage: `url(${activeProfile.avatarUrl})` }} 
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-brass/30 bg-brass/5">
+                      <UserRound size={48} />
+                    </div>
+                  )}
+                </div>
+
+                {/* HP/Status (If PC and HP exists) */}
+                {!activeProfile.isNpc && activeProfile.hp !== undefined && (
+                  <div className="w-full bg-black/40 rounded-xl border border-brass/20 p-3 text-xs space-y-2.5 mt-2">
+                    <div className="flex items-center justify-between font-serif font-bold text-stone-300">
+                      <span className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-brass">
+                        <Heart size={11} className="text-red-500" /> Vita (HP)
+                      </span>
+                      <span className="text-stone-100 font-mono">{activeProfile.hp} / 15</span>
+                    </div>
+                    <div className="h-2 w-full bg-black/50 rounded-full border border-white/5 overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-red-700 via-red-500 to-amber-500 transition-all duration-300" 
+                        style={{ width: `${Math.min(100, (activeProfile.hp / 15) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px] text-stone-400 border-t border-white/5 pt-2">
+                      <div>
+                        <span className="block text-[8px] uppercase font-bold text-stone-500 tracking-wider">Mente</span>
+                        <strong className="text-stone-200">{activeProfile.mentalState || "Stabile"}</strong>
+                      </div>
+                      <div>
+                        <span className="block text-[8px] uppercase font-bold text-stone-500 tracking-wider">Credo</span>
+                        <strong className="text-stone-200">{activeProfile.religion || "Nessuno"}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Information details */}
+              <div className="space-y-4 max-h-[26rem] overflow-y-auto pr-1 scrollbar-soft text-sm">
+                
+                {/* PC specifics */}
+                {!activeProfile.isNpc && activeProfile.userId && (
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-lg bg-black/35 border border-brass/20 p-2.5">
+                      <span className="block text-[9px] uppercase font-bold text-brass tracking-wider">Origine</span>
+                      <p className="text-stone-200 font-medium mt-0.5 text-sm">{activeProfile.origin || "Sconosciuta"}</p>
+                    </div>
+                    <div className="rounded-lg bg-black/35 border border-brass/20 p-2.5">
+                      <span className="block text-[9px] uppercase font-bold text-brass tracking-wider">Allineamento</span>
+                      <p className="text-stone-200 font-medium mt-0.5 text-sm">{activeProfile.alignment || "Neutrale"}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Traits and conditions */}
+                {!activeProfile.isNpc && ((activeProfile.traits && activeProfile.traits.length > 0) || (activeProfile.conditions && activeProfile.conditions.length > 0)) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeProfile.traits?.map((t: string) => (
+                      <span key={t} className="rounded border border-brass/35 bg-brass/15 px-2.5 py-0.5 text-[10px] font-bold text-brass uppercase tracking-wider">
+                        {t}
+                      </span>
+                    ))}
+                    {activeProfile.conditions?.map((c: string) => (
+                      <span key={c} className="rounded border border-red-500/25 bg-red-500/10 px-2.5 py-0.5 text-[10px] font-bold text-red-200 uppercase tracking-wider">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {activeProfile.appearance && (
+                  <p className="text-xs text-stone-300 italic border-l-2 border-brass/45 pl-2 leading-relaxed">
+                    Aspetto distintivo: {activeProfile.appearance}
+                  </p>
+                )}
+
+                {activeProfile.bond && (
+                  <p className="text-xs text-stone-400">
+                    Legame Narrativo: <strong className="text-stone-200 font-medium">{activeProfile.bond}</strong>
+                  </p>
+                )}
+
+                {/* Biography / Description wrapped in parchment style */}
+                <div className="ui-parchment text-xs leading-relaxed space-y-1">
+                  <span className="block font-serif text-[10px] uppercase tracking-wider font-bold mb-1.5 border-b border-black/10 pb-1 text-stone-800">
+                    Biografia / Descrizione
+                  </span>
+                  <p className="whitespace-pre-wrap font-sans text-stone-900 font-medium leading-relaxed">
+                    {activeProfile.bio || "Nessun dettaglio descritto."}
+                  </p>
+                </div>
+
+                {/* Private Secret: Visible only to owner OR Game Master */}
+                {!activeProfile.isNpc && activeProfile.secret && (activeProfile.userId === currentUserId || isMaster) && (
+                  <div className="rounded-lg border border-red-900/30 bg-red-950/20 p-3 shadow-[inset_0_0_12px_rgba(127,29,29,0.08)]">
+                    <div className="flex items-center gap-1.5 text-xs font-serif font-bold text-red-400 uppercase tracking-wider">
+                      <Lock size={12} className="text-red-500" /> Segreto Privato (Solo tu e il Master)
+                    </div>
+                    <p className="text-xs text-red-200/90 italic mt-1.5 leading-relaxed">
+                      {activeProfile.secret}
+                    </p>
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </section>
   );
 }

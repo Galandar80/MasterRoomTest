@@ -1,8 +1,8 @@
 "use client";
 
-import { Activity, ArrowLeft, AudioLines, Bell, ChevronDown, ChevronUp, Eye, Film, ImageUp, Library, ListOrdered, MapPinned, MessageSquareText, Pause, Pencil, Play, Plus, Radio, Save, ScrollText, Send, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, X } from "lucide-react";
+import { Activity, ArrowLeft, AudioLines, Bell, Check, ChevronDown, ChevronUp, Eye, EyeOff, Film, ImageUp, Library, ListOrdered, MapPinned, MessageSquareText, Pause, Pencil, Play, Plus, Radio, Save, ScrollText, Send, Shield, Sparkles, Square, Trash2, UsersRound, Volume2, VolumeX, X } from "lucide-react";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type { AudioTrack, InventoryItem, MapCharacterPosition, MediaAsset, Message, NarrativeMap, Npc, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
 import { AudioPlayer } from "@/components/room/audio-player";
 import { ChatPanel } from "@/components/room/chat-panel";
@@ -14,6 +14,7 @@ import { MapToolPanel } from "@/components/room/map-tool-panel";
 import type { CardDeckType } from "@/lib/game-random";
 import { shortTime } from "@/lib/utils";
 import { parseCharacterMetadata, stringifyCharacterMetadata } from "@/lib/character-metadata";
+import { playUiClick, playUiHover } from "@/lib/sound-generator";
 
 
 type MasterControlRoomProps = {
@@ -161,8 +162,33 @@ export function MasterControlRoom({
   const [masterChatText, setMasterChatText] = useState("");
   const [offText, setOffText] = useState("");
   const [isSoundbarOpen, setIsSoundbarOpen] = useState(false);
-  const [audioVolume, setAudioVolume] = useState(55);
-  const [audioMuted, setAudioMuted] = useState(false);
+  const [audioVolume, setAudioVolume] = useState<number>(55);
+  const [audioMuted, setAudioMuted] = useState<boolean>(false);
+  const [immersiveMode, setImmersiveMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedVol = localStorage.getItem("gdr_master_local_volume");
+      const savedMuted = localStorage.getItem("gdr_master_local_muted");
+      if (savedVol !== null) setAudioVolume(Number(savedVol));
+      if (savedMuted !== null) setAudioMuted(savedMuted === "true");
+    }
+  }, []);
+
+  const handleLocalVolumeChange = (vol: number) => {
+    setAudioVolume(vol);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gdr_master_local_volume", String(vol));
+    }
+  };
+
+  const handleLocalMutedChange = (muted: boolean) => {
+    setAudioMuted(muted);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gdr_master_local_muted", String(muted));
+    }
+  };
+
   const sessionMediaAssets = useMemo(() => buildSessionMediaAssets(state), [state]);
   const sendMasterChat = (text?: string) => {
     const msg = text || masterChatText;
@@ -175,7 +201,7 @@ export function MasterControlRoom({
   };
 
   return (
-    <section className="director-control-room relative -m-4 grid min-h-screen gap-4 overflow-hidden px-4 py-4 sm:-m-6 sm:px-5 sm:py-5">
+    <section className={`director-control-room relative -m-4 grid min-h-screen gap-4 overflow-hidden px-4 py-4 sm:-m-6 sm:px-5 sm:py-5 ${immersiveMode ? "is-immersive" : ""}`}>
       <div className="pointer-events-none absolute inset-0 app-theme-bg bg-cover bg-center opacity-70" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_68%_20%,rgba(147,51,234,0.18),transparent_32rem),linear-gradient(90deg,rgba(2,3,7,0.82),rgba(3,4,9,0.62)_48%,rgba(2,3,7,0.88)),linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.78))]" />
       <header className="director-card relative z-10 rounded-xl p-4">
@@ -343,19 +369,21 @@ export function MasterControlRoom({
         <DirectorStatusBar state={state} currentAudio={currentAudio} actionLog={actionLog} />
       </div>
 
-      <div className="director-workbench relative z-10 grid gap-4 2xl:grid-cols-[16rem_minmax(0,1fr)_25rem]">
-        <nav className="director-sidebar rounded-xl p-3">
-          <p className="px-3 pb-3 font-serif text-xs uppercase tracking-[0.28em] text-brass/80">Strumenti</p>
-          <ControlLink icon={<Eye size={16} />} label="Panoramica" active={activeTool === "preview"} onClick={() => setActiveTool("preview")} />
-          <ControlLink icon={<ImageUp size={16} />} label="Scene" active={activeTool === "scenes"} onClick={() => setActiveTool("scenes")} />
-          <ControlLink icon={<MapPinned size={16} />} label="Mappa" active={activeTool === "map"} onClick={() => setActiveTool("map")} />
-          <ControlLink icon={<MessageSquareText size={16} />} label="Chat e NPC" active={activeTool === "chat"} onClick={() => setActiveTool("chat")} />
-          <ControlLink icon={<UsersRound size={16} />} label="Giocatori" active={activeTool === "players"} onClick={() => setActiveTool("players")} />
-          <ControlLink icon={<AudioLines size={16} />} label="Audio" active={activeTool === "audio"} onClick={() => setActiveTool("audio")} />
-          <ControlLink icon={<Volume2 size={16} />} label="Soundbar" active={isSoundbarOpen} onClick={() => setIsSoundbarOpen(true)} />
-          <ControlLink icon={<Library size={16} />} label="Libreria media" active={activeTool === "media"} onClick={() => setActiveTool("media")} />
-          <ControlLink icon={<Shield size={16} />} label="Inventari" active={activeTool === "inventory"} onClick={() => setActiveTool("inventory")} />
-        </nav>
+      <div className={`director-workbench relative z-10 grid gap-4 ${immersiveMode ? "grid-cols-1" : "2xl:grid-cols-[16rem_minmax(0,1fr)_25rem]"}`}>
+        {!immersiveMode && (
+          <nav className="director-sidebar rounded-xl p-3">
+            <p className="px-3 pb-3 font-serif text-xs uppercase tracking-[0.28em] text-brass/80">Strumenti</p>
+            <ControlLink icon={<Eye size={16} />} label="Panoramica" active={activeTool === "preview"} onClick={() => setActiveTool("preview")} />
+            <ControlLink icon={<ImageUp size={16} />} label="Scene" active={activeTool === "scenes"} onClick={() => setActiveTool("scenes")} />
+            <ControlLink icon={<MapPinned size={16} />} label="Mappa" active={activeTool === "map"} onClick={() => setActiveTool("map")} />
+            <ControlLink icon={<MessageSquareText size={16} />} label="Chat e NPC" active={activeTool === "chat"} onClick={() => setActiveTool("chat")} />
+            <ControlLink icon={<UsersRound size={16} />} label="Giocatori" active={activeTool === "players"} onClick={() => setActiveTool("players")} />
+            <ControlLink icon={<AudioLines size={16} />} label="Audio" active={activeTool === "audio"} onClick={() => setActiveTool("audio")} />
+            <ControlLink icon={<Volume2 size={16} />} label="Soundbar" active={isSoundbarOpen} onClick={() => setIsSoundbarOpen(true)} />
+            <ControlLink icon={<Library size={16} />} label="Libreria media" active={activeTool === "media"} onClick={() => setActiveTool("media")} />
+            <ControlLink icon={<Shield size={16} />} label="Inventari" active={activeTool === "inventory"} onClick={() => setActiveTool("inventory")} />
+          </nav>
+        )}
 
         <div className="grid min-w-0 gap-4">
           {activeTool === "preview" ? (
@@ -392,8 +420,8 @@ export function MasterControlRoom({
                 audioVolume={audioVolume}
                 audioMuted={audioMuted}
                 audioTitle={currentAudio.title}
-                onAudioVolumeChange={setAudioVolume}
-                onAudioMutedChange={setAudioMuted}
+                onAudioVolumeChange={handleLocalVolumeChange}
+                onAudioMutedChange={handleLocalMutedChange}
               />
             </div>
           ) : null}
@@ -510,41 +538,43 @@ export function MasterControlRoom({
           ) : null}
         </div>
 
-        <DirectorRightRail
-          state={state}
-          identityId={identityId}
-          currentAudio={currentAudio}
-          onIdentityChange={onIdentityChange}
-          onSceneChange={onSceneChange}
-          onAudioChange={onAudioChange}
-          onSetActiveMap={onSetActiveMap}
-          onUpdateMapCharacterPosition={onUpdateMapCharacterPosition}
-          onSaveRoom={onSaveRoom}
-          onDeleteRoom={onDeleteRoom}
-          onOpenTool={setActiveTool}
-          onQuickCue={launchQuickCue}
-          onDirectorEvent={(event) => {
-            if (event.recipientUserId) {
-              onPrivateMessage(event.message, event.recipientUserId);
-            } else {
-              onPublicMessage(event.message);
-            }
-          }}
-          onCreateDiceRequest={onCreateDiceRequest}
-          onDrawCard={onDrawCard}
-          actionLog={actionLog}
-          onSaveRoomTurnState={onSaveRoomTurnState}
-        />
+        {!immersiveMode && (
+          <DirectorRightRail
+            state={state}
+            identityId={identityId}
+            currentAudio={currentAudio}
+            onIdentityChange={onIdentityChange}
+            onSceneChange={onSceneChange}
+            onAudioChange={onAudioChange}
+            onSetActiveMap={onSetActiveMap}
+            onUpdateMapCharacterPosition={onUpdateMapCharacterPosition}
+            onSaveRoom={onSaveRoom}
+            onDeleteRoom={onDeleteRoom}
+            onOpenTool={setActiveTool}
+            onQuickCue={launchQuickCue}
+            onDirectorEvent={(event) => {
+              if (event.recipientUserId) {
+                onPrivateMessage(event.message, event.recipientUserId);
+              } else {
+                onPublicMessage(event.message);
+              }
+            }}
+            onCreateDiceRequest={onCreateDiceRequest}
+            onDrawCard={onDrawCard}
+            actionLog={actionLog}
+            onSaveRoomTurnState={onSaveRoomTurnState}
+          />
+        )}
       </div>
       <div className="relative z-20">
         <AudioPlayer
           track={currentAudio}
           status={state.room.audio_status}
           onStatusChange={(status) => onSaveRoomAudioState({ audioStatus: status, audioVolume: state.room.audio_volume ?? 55 })}
-          externalVolume={state.room.audio_volume ?? 55}
-          onVolumeChange={(volume) => onSaveRoomAudioState({ audioStatus: state.room.audio_status ?? "playing", audioVolume: volume })}
+          externalVolume={audioVolume}
+          onVolumeChange={handleLocalVolumeChange}
           externalMuted={audioMuted}
-          onMutedChange={setAudioMuted}
+          onMutedChange={handleLocalMutedChange}
         />
       </div>
       {isSoundbarOpen ? (
@@ -558,6 +588,19 @@ export function MasterControlRoom({
           onStopSoundEffect={onStopSoundEffect}
         />
       ) : null}
+      <MasterActionHotbar
+        state={state}
+        activeTool={activeTool}
+        setActiveTool={setActiveTool}
+        isSoundbarOpen={isSoundbarOpen}
+        setIsSoundbarOpen={setIsSoundbarOpen}
+        immersiveMode={immersiveMode}
+        onToggleImmersive={() => setImmersiveMode((value) => !value)}
+        localVolume={audioVolume}
+        localMuted={audioMuted}
+        onVolumeChange={handleLocalVolumeChange}
+        onMutedChange={handleLocalMutedChange}
+      />
     </section>
   );
 }
@@ -3005,4 +3048,205 @@ function resolveMessageAvatar(state: RoomState, message: Message) {
   }
 
   return { url: "", fallback: "M" };
+}
+
+type MasterActionHotbarProps = {
+  state: RoomState;
+  activeTool: ControlTool;
+  setActiveTool: (tool: ControlTool) => void;
+  isSoundbarOpen: boolean;
+  setIsSoundbarOpen: (open: boolean) => void;
+  immersiveMode: boolean;
+  onToggleImmersive: () => void;
+  localVolume: number;
+  localMuted: boolean;
+  onVolumeChange: (vol: number) => void;
+  onMutedChange: (muted: boolean) => void;
+};
+
+function MasterActionHotbar({
+  state,
+  activeTool,
+  setActiveTool,
+  isSoundbarOpen,
+  setIsSoundbarOpen,
+  immersiveMode,
+  onToggleImmersive,
+  localVolume,
+  localMuted,
+  onVolumeChange,
+  onMutedChange
+}: MasterActionHotbarProps) {
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const totalNotifications = state.diceRequests.length + (state.room.spotlight_npc_id ? 1 : 0);
+
+  const tools: Array<{ id: ControlTool; label: string; icon: React.ReactNode }> = [
+    { id: "preview", label: "Regia", icon: <Eye size={14} /> },
+    { id: "scenes", label: "Scene", icon: <ImageUp size={14} /> },
+    { id: "map", label: "Mappa", icon: <MapPinned size={14} /> },
+    { id: "chat", label: "Chat", icon: <MessageSquareText size={14} /> },
+    { id: "players", label: "Eroi", icon: <UsersRound size={14} /> },
+    { id: "audio", label: "Audio", icon: <AudioLines size={14} /> },
+    { id: "media", label: "Media", icon: <Library size={14} /> },
+    { id: "inventory", label: "Zaini", icon: <Shield size={14} /> }
+  ];
+
+  return (
+    <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 flex items-center gap-3 ui-hotbar-panel shadow-2xl transition-all duration-300">
+      
+      {/* 🔔 Notifications Hub */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => { setShowNotifications(!showNotifications); playUiClick(); }}
+          onMouseEnter={playUiHover}
+          className={`relative flex h-8 w-8 items-center justify-center rounded-full border transition ${
+            showNotifications
+              ? "border-brass bg-brass/20 text-brass"
+              : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass"
+          }`}
+          title="Notifiche attive"
+        >
+          <Bell size={14} />
+          {totalNotifications > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-600 text-[8px] font-bold text-white animate-pulse">
+              {totalNotifications}
+            </span>
+          )}
+        </button>
+
+        {showNotifications && (
+          <div className="absolute bottom-12 left-0 z-50 w-64 rounded-xl border border-white/10 bg-ink-950/95 p-3 shadow-xl backdrop-blur-md space-y-2 text-left">
+            <h3 className="text-xs font-semibold text-brass uppercase tracking-wider flex items-center gap-1.5 pb-1.5 border-b border-white/5">
+              <Bell size={12} /> Notifiche Master
+            </h3>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {state.diceRequests.map((req) => {
+                const targetChar = state.characters.find((c) => c.user_id === req.target_user_id);
+                const targetName = targetChar ? `${targetChar.character_name}` : "Tutti";
+                return (
+                  <div key={req.id} className="flex flex-col gap-1 rounded bg-white/[0.02] border border-white/5 p-2 text-[11px] text-slate-300">
+                    <span className="font-semibold text-amber-400 flex items-center gap-1">
+                      <Sparkles size={11} /> Richiesta d{req.dice_sides} ({targetName})
+                    </span>
+                    <span>Motivo: &ldquo;{req.reason}&rdquo;</span>
+                  </div>
+                );
+              })}
+              {state.room.spotlight_npc_id && (
+                <div className="flex flex-col gap-0.5 rounded bg-white/[0.02] border border-white/5 p-2 text-[11px] text-slate-300">
+                  <span className="font-semibold text-brass flex items-center gap-1">
+                    <Eye size={11} /> NPC in Evidenza
+                  </span>
+                  <span>
+                    ID NPC: <strong>{state.room.spotlight_npc_id}</strong>
+                  </span>
+                </div>
+              )}
+              {totalNotifications === 0 && (
+                <div className="flex items-center gap-2 py-2 px-1 text-xs text-slate-500 italic">
+                  <Check size={14} className="text-emerald-500" /> Nessun evento attivo.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="h-4 w-px bg-white/10" />
+
+      {/* 🛠️ GM Tools Navigation */}
+      <div className="flex items-center gap-1.5">
+        {tools.map((tool) => (
+          <button
+            key={tool.id}
+            type="button"
+            onClick={() => {
+              setActiveTool(tool.id);
+              playUiClick();
+            }}
+            onMouseEnter={playUiHover}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded ui-btn-fantasy transition-all duration-200 ${
+              activeTool === tool.id ? "brightness-125 filter drop-shadow-[0_0_8px_rgba(249,115,22,0.7)]" : ""
+            }`}
+            title={tool.label}
+          >
+            {tool.icon}
+            <span className="hidden md:inline text-[11px] font-serif uppercase tracking-wider">{tool.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="h-4 w-px bg-white/10" />
+
+      {/* 🎵 Soundbar Toggle */}
+      <button
+        type="button"
+        onClick={() => {
+          setIsSoundbarOpen(!isSoundbarOpen);
+          playUiClick();
+        }}
+        onMouseEnter={playUiHover}
+        className={`flex items-center gap-1 px-3 py-1.5 rounded ui-btn-fantasy transition-all duration-200 ${
+          isSoundbarOpen ? "brightness-125 filter drop-shadow-[0_0_8px_rgba(249,115,22,0.7)]" : ""
+        }`}
+        title="Apri Soundbar"
+      >
+        <Volume2 size={14} />
+        <span className="hidden md:inline text-[11px] font-serif uppercase tracking-wider">Soundbar</span>
+      </button>
+
+      <div className="h-4 w-px bg-white/10" />
+
+      {/* 🔊 Local Audio Control (GM Local Volume/Mute) */}
+      <div className="relative flex items-center gap-1.5 group">
+        <button
+          type="button"
+          onClick={() => {
+            onMutedChange(!localMuted);
+            playUiClick();
+          }}
+          onMouseEnter={playUiHover}
+          className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
+            localMuted ? "text-rose-400 bg-rose-500/10 hover:bg-rose-500/20" : "text-slate-400 hover:bg-white/5 hover:text-white"
+          }`}
+          title={localMuted ? "Riattiva audio Master" : "Muta audio Master"}
+        >
+          {localMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+        </button>
+        <div className="w-0 overflow-hidden group-hover:w-20 transition-all duration-300 ease-in-out flex items-center">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={localMuted ? 0 : localVolume}
+            onChange={(e) => {
+              onVolumeChange(Number(e.target.value));
+            }}
+            className="w-16 h-1 accent-brass bg-stone-700 rounded-lg appearance-none cursor-pointer"
+            aria-label="Volume locale Master"
+          />
+        </div>
+      </div>
+
+      <div className="h-4 w-px bg-white/10" />
+
+      {/* ⚙️ Immersive Mode Toggle */}
+      <button
+        type="button"
+        onClick={() => {
+          onToggleImmersive();
+          playUiClick();
+        }}
+        onMouseEnter={playUiHover}
+        className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
+          immersiveMode ? "bg-brass/15 text-brass" : "text-slate-400 hover:bg-white/5 hover:text-white"
+        }`}
+        title={immersiveMode ? "Mostra Interfaccia Regia" : "Modalità Immersiva Master"}
+      >
+        {immersiveMode ? <EyeOff size={14} /> : <Eye size={14} />}
+      </button>
+    </div>
+  );
 }

@@ -101,14 +101,63 @@ export function StartMenu({
     };
   }, []);
 
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  const THEME_VIDEOS: Record<string, { local: string; fallback: string }> = {
+    fantasy: {
+      local: "/assets/menu/theme-master-room-hero.mp4",
+      fallback: "https://assets.mixkit.co/videos/preview/mixkit-fire-burning-in-a-forest-close-up-42826-large.mp4"
+    },
+    cyberpunk: {
+      local: "/assets/menu/theme-cyberpunk.mp4",
+      fallback: "https://assets.mixkit.co/videos/preview/mixkit-retro-futuristic-grid-background-with-glowing-lines-48906-large.mp4"
+    },
+    lovecraft: {
+      local: "/assets/menu/theme-lovecraft.mp4",
+      fallback: "https://assets.mixkit.co/videos/preview/mixkit-ink-swirling-in-water-43301-large.mp4"
+    },
+    scifi: {
+      local: "/assets/menu/theme-scifi.mp4",
+      fallback: "https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-and-milky-way-4447-large.mp4"
+    }
+  };
+
+  useEffect(() => {
+    // Reset video states on theme change
+    setVideoLoaded(false);
+    setVideoError(false);
+  }, [selectedTheme]);
+
   return (
     <section className={`premium-start-menu relative -m-4 min-h-screen overflow-hidden px-5 py-6 text-white sm:-m-6 sm:px-10 lg:px-16 ${moonMode ? "premium-start-menu--moon" : ""}`}>
       <audio ref={audioRef} src="/assets/audio/master-room-ambience-2.mp3" loop preload="auto" />
+      
+      {/* Static Image Background (Always behind as loading / error fallback) */}
       <div 
         className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-in-out" 
         style={{ backgroundImage: `url('/assets/menu/theme-${selectedTheme}.png')` }}
       />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_74%_24%,rgba(111,46,175,0.28),transparent_28rem),linear-gradient(90deg,rgba(2,3,7,0.58)_0%,rgba(2,3,7,0.2)_48%,rgba(2,3,7,0.74)_100%),linear-gradient(180deg,rgba(0,0,0,0.34)_0%,rgba(0,0,0,0.08)_42%,rgba(0,0,0,0.88)_100%)]" />
+
+      {/* Looping Atmospheric Video Background */}
+      {!videoError && (
+        <video
+          key={selectedTheme}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ${videoLoaded ? "opacity-100" : "opacity-0"}`}
+          onPlay={() => setVideoLoaded(true)}
+          onError={() => setVideoError(true)}
+        >
+          <source src={THEME_VIDEOS[selectedTheme].local} type="video/mp4" />
+          <source src={THEME_VIDEOS[selectedTheme].fallback} type="video/mp4" />
+        </video>
+      )}
+
+      {/* Cinematic Vignette Overlay */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_74%_24%,rgba(111,46,175,0.2),transparent_35rem),linear-gradient(90deg,rgba(2,3,7,0.68)_0%,rgba(2,3,7,0.2)_48%,rgba(2,3,7,0.78)_100%),linear-gradient(180deg,rgba(0,0,0,0.34)_0%,rgba(0,0,0,0.08)_42%,rgba(0,0,0,0.88)_100%)]" />
 
       <div className="relative z-10 flex min-h-[calc(100vh-3rem)] flex-col">
         <header className="flex items-center justify-between gap-4">
