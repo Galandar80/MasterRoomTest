@@ -284,7 +284,7 @@ export function CharacterSetupForm({ defaultName, onBack, onCreate }: CharacterS
   return (
     <div className="mx-auto grid w-full max-w-6.5xl gap-5 py-4 p-4 text-white">
       {/* Top Selection Strip - Fluid Grid for 10 items */}
-      <section className="ui-panel-window rounded-xl relative shadow-2xl">
+      <section className="character-archetype-panel ui-panel-window rounded-xl relative shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3 mb-4">
           <button
             type="button"
@@ -302,14 +302,14 @@ export function CharacterSetupForm({ defaultName, onBack, onCreate }: CharacterS
           </h2>
           <div className="w-24 hidden sm:block" />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-10">
+        <div className="character-archetype-grid grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-10">
           {ARCHETYPES.map((arch) => (
             <button
               key={arch.id}
               type="button"
               onMouseEnter={playUiHover}
               onClick={() => handleSelectArchetype(arch)}
-              className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition duration-300 ${
+              className={`character-archetype-card flex flex-col items-center justify-center rounded-xl border p-2.5 transition duration-300 ${
                 selectedArchId === arch.id
                   ? "border-brass bg-brass/15 text-brass shadow-[0_0_12px_rgba(200,163,93,0.25)]"
                   : "border-white/10 bg-white/[0.02] text-slate-400 hover:border-white/20 hover:bg-white/[0.05]"

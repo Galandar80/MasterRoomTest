@@ -4679,6 +4679,19 @@ select.field:focus {
   display: none !important;
 }
 
+.player-action-hotbar.ui-hotbar-panel {
+  position: fixed !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+  transform: translateX(-50%) !important;
+  z-index: 90 !important;
+}
+
+.story-mobile-reply-button {
+  display: none;
+}
+
 /* 5. Regular RPG button plate */
 .ui-btn-fantasy {
   position: relative !important;
@@ -5201,10 +5214,70 @@ select.field:focus {
     border-radius: 0.8rem !important;
   }
 
-  .ui-hotbar-panel {
-    left: 0.75rem !important;
-    right: 0.75rem !important;
+  .player-room-shell {
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .player-action-hotbar.ui-hotbar-panel {
+    position: fixed !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)) !important;
+    width: min(calc(100vw - 1.5rem), 38rem) !important;
     max-width: calc(100vw - 1.5rem) !important;
-    transform: none !important;
+    transform: translateX(-50%) !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    gap: 0.55rem !important;
+    z-index: 90 !important;
+  }
+
+  .player-action-hotbar .h-4.w-px {
+    display: none !important;
+  }
+
+  .story-reply-button {
+    display: none !important;
+  }
+
+  .story-mobile-reply-button {
+    display: inline-flex;
+  }
+
+  .character-archetype-panel {
+    padding: 0.8rem !important;
+  }
+
+  .character-archetype-panel h2 {
+    width: 100%;
+    justify-content: center;
+    font-size: 0.82rem !important;
+    letter-spacing: 0.08em !important;
+  }
+
+  .character-archetype-grid {
+    display: flex !important;
+    grid-template-columns: none !important;
+    gap: 0.55rem !important;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    padding: 0.1rem 0.05rem 0.55rem;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .character-archetype-card {
+    min-width: 8.4rem !important;
+    scroll-snap-align: start;
+  }
+
+  .character-archetype-card strong {
+    line-height: 1.15 !important;
+    white-space: normal !important;
+  }
+
+  .character-archetype-card small {
+    line-height: 1.1 !important;
+    white-space: normal !important;
   }
 }

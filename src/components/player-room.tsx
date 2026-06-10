@@ -776,7 +776,7 @@ function PlayerActionHotbar({
   const totalNotifications = visibleDiceRequests.length + (spotlightVisible ? 1 : 0);
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 flex items-center gap-3 ui-hotbar-panel shadow-2xl transition-all duration-300">
+    <div className="player-action-hotbar fixed bottom-4 left-1/2 z-40 -translate-x-1/2 flex items-center gap-3 ui-hotbar-panel shadow-2xl transition-all duration-300">
       
       {/* 🔔 Notifications Hub */}
       <div className="relative">

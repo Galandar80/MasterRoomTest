@@ -12,7 +12,7 @@ export type CharacterMetadata = {
 export function parseCharacterMetadata(rawPublicBackground: string | null | undefined): CharacterMetadata {
   const raw = rawPublicBackground?.trim() ?? "";
   try {
-    if (raw.startsWith("{") && raw.endsWith("}")) {
+    if (raw.startsWith("{")) {
       const parsed = JSON.parse(raw);
       return {
         archetype: parsed.archetype ?? "",
@@ -26,7 +26,18 @@ export function parseCharacterMetadata(rawPublicBackground: string | null | unde
       };
     }
   } catch (e) {
-    // Fallback if JSON parsing fails
+    if (raw.startsWith("{")) {
+      return {
+        archetype: extractJsonishString(raw, "archetype"),
+        origin: extractJsonishString(raw, "origin"),
+        traits: extractJsonishArray(raw, "traits"),
+        private_secret: extractJsonishString(raw, "private_secret"),
+        bio: extractJsonishString(raw, "bio"),
+        appearance: extractJsonishString(raw, "appearance"),
+        alignment: extractJsonishString(raw, "alignment") || "Neutrale",
+        bond: extractJsonishString(raw, "bond")
+      };
+    }
   }
 
   return {
@@ -43,4 +54,18 @@ export function parseCharacterMetadata(rawPublicBackground: string | null | unde
 
 export function stringifyCharacterMetadata(metadata: CharacterMetadata): string {
   return JSON.stringify(metadata);
+}
+
+function extractJsonishString(raw: string, key: string) {
+  const match = raw.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)`, "i"));
+  return match?.[1]?.trim() ?? "";
+}
+
+function extractJsonishArray(raw: string, key: string) {
+  const match = raw.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*)\\]`, "i"));
+  if (!match) return [];
+  return match[1]
+    .split(",")
+    .map((item) => item.replace(/^["'\s]+|["'\s]+$/g, "").trim())
+    .filter(Boolean);
 }

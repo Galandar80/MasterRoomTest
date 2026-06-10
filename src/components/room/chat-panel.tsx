@@ -170,9 +170,10 @@ export function ChatPanel({
         if (filter === "master" && message.sender_type !== "master") return false;
         if (filter === "npc" && message.sender_type !== "npc") return false;
         if (filter === "player" && message.sender_type !== "player") return false;
-        if (filter === "dice" && !message.content.toLowerCase().includes("tira d")) return false;
+        const visibleContent = getVisibleMessageContent(message.content);
+        if (filter === "dice" && !visibleContent.toLowerCase().includes("tira d")) return false;
         if (filter === "pinned" && !message.is_pinned) return false;
-        if (normalized && !`${message.sender_display_name} ${message.content}`.toLowerCase().includes(normalized)) return false;
+        if (normalized && !`${message.sender_display_name} ${visibleContent}`.toLowerCase().includes(normalized)) return false;
         return true;
       } else {
         const req = item.request;
@@ -356,6 +357,11 @@ export function ChatPanel({
           const meta = messageMeta(message);
           const replyInfo = parseMessageReplies(message.content);
           const narrative = parseNarrativeContent(replyInfo.content);
+          const canReplyToMessage = !message.is_private && message.sender_type !== "system";
+          const startReply = () => {
+            import("@/lib/sound-generator").then((mod) => mod.playUiClick());
+            setReplyTo(message);
+          };
 
           return (
             <article
@@ -393,14 +399,11 @@ export function ChatPanel({
                     {message.is_pinned ? <Pin size={13} className="text-ember-200" /> : null}
                     <time className="text-xs text-slate-500">{shortTime(message.created_at)}</time>
 
-                    {!message.is_private && message.sender_type !== "system" ? (
+                    {canReplyToMessage ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          import("@/lib/sound-generator").then((mod) => mod.playUiClick());
-                          setReplyTo(message);
-                        }}
-                        className="text-stone-400 hover:text-white"
+                        onClick={startReply}
+                        className="story-reply-button text-stone-400 hover:text-white"
                         title="Rispondi a questo messaggio"
                         aria-label="Rispondi"
                       >
@@ -456,7 +459,7 @@ export function ChatPanel({
                     {replyInfo.replyToId ? (() => {
                       const parentMsg = messages.find((m) => m.id === replyInfo.replyToId);
                       const parentText = parentMsg
-                        ? parentMsg.content.replace(/^\[(azione|pensiero|evento|reply-to)[^\]]*\]\s*/i, "").replace(/^\[reply-to:[^\]]+\]\s*/i, "")
+                        ? getVisibleMessageContent(parentMsg.content).replace(/^\[(azione|pensiero|evento|capitolo|sussurro)\]\s*/i, "")
                         : "[Messaggio non trovato]";
                       return (
                         <div className="mb-1.5 flex items-center gap-1.5 rounded chat-reply-quote border-l-2 px-2 py-1 text-xs text-stone-400 select-none">
@@ -472,8 +475,17 @@ export function ChatPanel({
 
                     <p className="whitespace-pre-wrap text-sm leading-6 text-white">
                       {!meta.isDice && narrative.label ? <span className="story-narrative-label">{narrative.label}</span> : null}
-                      {meta.isDice ? message.content : narrative.wrap ? <>“{narrative.content}”</> : narrative.content} {message.edited_at ? <span className="text-xs text-slate-500">(modificato)</span> : null}
+                      {meta.isDice ? getVisibleMessageContent(message.content) : narrative.wrap ? <>“{narrative.content}”</> : narrative.content} {message.edited_at ? <span className="text-xs text-slate-500">(modificato)</span> : null}
                     </p>
+                    {canReplyToMessage ? (
+                      <button
+                        type="button"
+                        onClick={startReply}
+                        className="story-mobile-reply-button mt-2 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-stone-300"
+                      >
+                        <CornerUpLeft size={12} /> Rispondi
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -509,7 +521,7 @@ export function ChatPanel({
         {replyTo ? (
           <div className="mb-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-stone-400">
             <span className="truncate">
-              Risposta a <strong style={{ color: replyTo.sender_color }}>{replyTo.sender_display_name}</strong>: &ldquo;{replyTo.content.replace(/^\[(azione|pensiero|evento|reply-to)[^\]]*\]\s*/i, "").replace(/^\[reply-to:[^\]]+\]\s*/i, "").slice(0, 45)}&rdquo;
+              Risposta a <strong style={{ color: replyTo.sender_color }}>{replyTo.sender_display_name}</strong>: &ldquo;{getVisibleMessageContent(replyTo.content).replace(/^\[(azione|pensiero|evento|capitolo|sussurro)\]\s*/i, "").slice(0, 45)}&rdquo;
             </span>
             <button
               type="button"
@@ -770,7 +782,7 @@ export function ChatPanel({
 }
 
 function messageMeta(message: Message) {
-  const lowered = message.content.toLowerCase();
+  const lowered = getVisibleMessageContent(message.content).toLowerCase();
   const isDice = lowered.includes("tira d") || lowered.includes("risultato:");
   if (isDice) return { label: "Tiro", icon: <Dice5 size={13} />, isDice };
   if (message.is_private) return { label: "Sussurro", icon: <Shield size={13} />, isDice };
@@ -838,13 +850,23 @@ function isTechnicalMessage(message: Message) {
 }
 
 function parseMessageReplies(content: string) {
-  const match = content.match(/^\[reply-to:([^:]+):([^\]]+)\]\s*(.*)$/i);
+  const normalized = content.trimStart();
+  const match = normalized.match(/^(["“]?)(?:\[reply-to:([^:]+):([^\]]+)\]\s*)([\s\S]*)$/i);
   if (!match) return { replyToId: null, replyToSender: null, content };
+  const wrappedByQuote = Boolean(match[1]);
+  let visibleContent = match[4];
+  if (wrappedByQuote) {
+    visibleContent = visibleContent.replace(/["”]\s*$/u, "");
+  }
   return {
-    replyToId: match[1],
-    replyToSender: match[2],
-    content: match[3]
+    replyToId: match[2],
+    replyToSender: match[3],
+    content: visibleContent
   };
+}
+
+function getVisibleMessageContent(content: string) {
+  return parseMessageReplies(content).content;
 }
 
 function filterMessages(messages: Message[], filter: ChatFilter, search: string) {
