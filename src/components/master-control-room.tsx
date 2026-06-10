@@ -388,17 +388,24 @@ export function MasterControlRoom({
         <div className="grid min-w-0 gap-4">
           {activeTool === "preview" ? (
             <div className="director-overview grid gap-4">
-              <ReadOnlyChat
-                state={state}
+              <ChatPanel
                 messages={state.messages}
-                privateCount={state.privateMessages.length}
                 value={masterChatText}
-                onChange={(value) => {
-                  setMasterChatText(value);
-                  if (value.trim()) onTyping("gdr");
-                }}
+                onChange={setMasterChatText}
                 onSend={sendMasterChat}
+                onTyping={() => onTyping("gdr")}
                 onDeleteMessage={onDeleteMessage}
+                onEditMessage={onEditMessage}
+                onTogglePin={onToggleMessagePin}
+                onLoadOlder={onLoadOlderMessages}
+                hasOlderMessages={state.hasOlderMessages}
+                currentUserId={state.profile.id}
+                isMaster
+                characters={state.characters}
+                npcs={state.npcs}
+                showAvatars
+                typing={state.typing}
+                diceRequests={state.diceRequests}
                 identityId={identityId}
                 onIdentityChange={onIdentityChange}
               />
@@ -2909,145 +2916,6 @@ function InventoryPanel({
       </div>
     </section>
   );
-}
-
-function ReadOnlyChat({
-  state,
-  messages,
-  privateCount,
-  value,
-  onChange,
-  onSend,
-  onDeleteMessage,
-  identityId,
-  onIdentityChange
-}: {
-  state: RoomState;
-  messages: RoomState["messages"];
-  privateCount: number;
-  value: string;
-  onChange: (value: string) => void;
-  onSend: () => void;
-  onDeleteMessage?: (message: Message) => void;
-  identityId: string;
-  onIdentityChange: (id: string) => void;
-}) {
-  return (
-    <section className="director-live-chat glass-panel min-h-[27rem] rounded-lg p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-brass">
-          <MessageSquareText size={16} /> Chat live
-        </h2>
-        <span className="rounded-md border border-brass/20 bg-brass/10 px-2 py-1 text-xs text-brass">{messages.length} messaggi</span>
-      </div>
-      <div className="director-live-chat-list scrollbar-soft mt-4 space-y-3 overflow-y-auto pr-1">
-        {messages.slice(-10).map((message) => {
-          const avatar = resolveMessageAvatar(state, message);
-
-          return (
-            <article key={message.id} className="director-live-message">
-              <div
-                className="director-live-avatar"
-                style={avatar.url ? { backgroundImage: `url(${avatar.url})`, color: message.sender_color } : { color: message.sender_color }}
-                aria-hidden="true"
-              >
-                {avatar.url ? "" : avatar.fallback}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-sm font-semibold" style={{ color: message.sender_color }}>
-                    {message.sender_display_name}
-                  </p>
-                  {onDeleteMessage ? (
-                    <button type="button" onClick={() => onDeleteMessage(message)} className="text-rose-200 hover:text-rose-100" title="Elimina messaggio" aria-label="Elimina messaggio">
-                      <Trash2 size={14} />
-                    </button>
-                  ) : null}
-                </div>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white">{message.content}</p>
-              </div>
-            </article>
-          );
-        })}
-        {!messages.length ? (
-          <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-6 text-center text-sm text-stone-400">La chat live apparira qui durante la sessione.</p>
-        ) : null}
-      </div>
-      <p className="mt-3 text-xs text-slate-400">{privateCount} messaggi privati nella cronologia Master.</p>
-      <form
-        className="director-live-composer mt-4 flex flex-col gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSend();
-        }}
-      >
-        {state.npcs && state.npcs.length > 0 && onIdentityChange && (
-          <div className="flex flex-wrap items-center gap-1.5 pb-1 border-b border-white/5">
-            <span className="text-[10px] uppercase font-bold text-stone-500 mr-1">Scrivi come:</span>
-            <button
-              type="button"
-              onClick={() => onIdentityChange("master")}
-              className={`rounded px-2 py-0.5 text-[10px] font-semibold transition border ${
-                identityId === "master"
-                  ? "bg-brass/20 text-brass border-brass/45"
-                  : "bg-white/[0.02] text-stone-400 border-white/5 hover:bg-white/[0.06]"
-              }`}
-            >
-              Master
-            </button>
-            {state.npcs.map((npc) => (
-              <button
-                key={npc.id}
-                type="button"
-                onClick={() => onIdentityChange(npc.id)}
-                className={`rounded px-2 py-0.5 text-[10px] font-semibold transition border ${
-                  identityId === npc.id
-                    ? "border-brass/45 bg-brass/20 text-brass"
-                    : "bg-white/[0.02] text-stone-400 border-white/5 hover:bg-white/[0.06]"
-                }`}
-                style={identityId === npc.id ? {} : { color: npc.color }}
-              >
-                {npc.name}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="flex gap-2 w-full">
-          <textarea
-            className="field min-h-12 flex-1 resize-none px-3 py-3 text-sm"
-            placeholder="Scrivi messaggio pubblico..."
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" || event.shiftKey) return;
-              event.preventDefault();
-              onSend();
-            }}
-          />
-          <button type="submit" className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-ember-500 text-ink-900 transition hover:bg-ember-400" aria-label="Invia messaggio" title="Invia messaggio">
-            <MessageSquareText size={18} />
-          </button>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-function resolveMessageAvatar(state: RoomState, message: Message) {
-  if (message.sender_type === "npc" && message.npc_id) {
-    const npc = state.npcs.find((item) => item.id === message.npc_id);
-    return { url: npc?.portrait_url ?? "", fallback: npc?.name.slice(0, 1).toUpperCase() ?? "N" };
-  }
-
-  if (message.sender_type === "player" && message.sender_user_id) {
-    const character = state.characters.find((item) => item.user_id === message.sender_user_id);
-    return {
-      url: character?.portrait_url ?? "",
-      fallback: (character?.character_name ?? message.sender_display_name).slice(0, 1).toUpperCase()
-    };
-  }
-
-  return { url: "", fallback: "M" };
 }
 
 type MasterActionHotbarProps = {

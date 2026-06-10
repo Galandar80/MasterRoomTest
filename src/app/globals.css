@@ -2100,48 +2100,6 @@ button:active {
   line-height: 1.5;
 }
 
-.director-live-chat {
-  min-height: 28rem;
-}
-
-.director-live-chat-list {
-  max-height: 23rem;
-}
-
-.director-live-message {
-  display: flex;
-  gap: 0.8rem;
-  border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
-    rgba(0, 0, 0, 0.24);
-  padding: 0.75rem;
-}
-
-.director-live-avatar {
-  display: grid;
-  height: 3rem;
-  width: 3rem;
-  flex-shrink: 0;
-  place-items: center;
-  border-radius: 0.65rem;
-  border: 1px solid rgba(var(--color-brass-rgb), 0.22);
-  background:
-    linear-gradient(180deg, rgba(var(--color-brass-rgb), 0.12), rgba(0, 0, 0, 0.38)),
-    #06070b;
-  background-position: center;
-  background-size: cover;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1rem;
-  box-shadow: inset 0 0 22px rgba(var(--color-brass-rgb), 0.07);
-}
-
-.director-live-composer {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 0.85rem;
-}
-
 @media (min-width: 1280px) {
   .director-overview-lower {
     align-items: stretch;
@@ -5011,7 +4969,6 @@ select.field:focus {
   .director-tool-panel,
   .director-create-panel,
   .director-rail-section,
-  .director-live-message,
   .director-current-card,
   .master-command-panel,
   .story-chat-panel,
