@@ -8,16 +8,23 @@ type CharacterRailProps = {
   inventory?: InventoryItem[];
   presence?: RoomPresence[];
   side: "left" | "right";
+  onOpenCharacter?: (characterId: string) => void;
 };
 
-export function CharacterRail({ characters, inventory = [], presence = [], side }: CharacterRailProps) {
+export function CharacterRail({ characters, inventory = [], presence = [], side, onOpenCharacter }: CharacterRailProps) {
   return (
     <aside className="player-character-rail hidden xl:block">
       <div className="sticky top-4 flex flex-col gap-3">
         {characters.map((character) => {
           const meta = parseCharacterMetadata(character.public_background);
           return (
-            <article key={character.id} className="player-character-card overflow-hidden rounded-xl">
+            <button
+              key={character.id}
+              type="button"
+              onClick={() => onOpenCharacter?.(character.id)}
+              className="player-character-card overflow-hidden rounded-xl text-left transition hover:border-brass/40 focus-visible:border-brass/60"
+              title={`Apri scheda di ${character.character_name}`}
+            >
               <header className="flex items-center justify-between gap-3 px-3 py-3">
                 <h3 className="truncate text-lg font-semibold" style={{ color: character.color }}>
                   {character.character_name}
@@ -62,7 +69,7 @@ export function CharacterRail({ characters, inventory = [], presence = [], side 
                 {!inventory.some((item) => item.character_id === character.id && item.is_public) ? <span className="text-slate-500">Nessun oggetto pubblico.</span> : null}
               </div>
             </div>
-          </article>
+          </button>
           );
         })}
         {characters.length === 0 ? (

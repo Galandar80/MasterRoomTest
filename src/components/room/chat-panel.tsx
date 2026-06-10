@@ -7,6 +7,7 @@ import { cn, shortTime } from "@/lib/utils";
 import { parseCharacterMetadata } from "@/lib/character-metadata";
 
 const TECHNICAL_MESSAGE_PREFIXES = ["__gdr_map_sync__:"];
+type ChatDensity = "wide" | "compact" | "ultra";
 
 type ChatPanelProps = {
   messages: Message[];
@@ -62,7 +63,7 @@ export function ChatPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [isCompact, setIsCompact] = useState(false);
+  const [density, setDensity] = useState<ChatDensity>("wide");
   const [failedAvatarUrls, setFailedAvatarUrls] = useState<Set<string>>(new Set());
   const [activeProfile, setActiveProfile] = useState<{
     name: string;
@@ -195,13 +196,14 @@ export function ChatPanel({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setIsCompact(localStorage.getItem("gdr_chat_density") === "compact");
+    const savedDensity = localStorage.getItem("gdr_chat_density");
+    setDensity(savedDensity === "compact" || savedDensity === "ultra" ? savedDensity : "wide");
   }, []);
 
-  const setChatDensity = (compact: boolean) => {
-    setIsCompact(compact);
+  const setChatDensity = (nextDensity: ChatDensity) => {
+    setDensity(nextDensity);
     if (typeof window !== "undefined") {
-      localStorage.setItem("gdr_chat_density", compact ? "compact" : "wide");
+      localStorage.setItem("gdr_chat_density", nextDensity);
     }
   };
 
@@ -248,7 +250,7 @@ export function ChatPanel({
   }, [messages]);
 
   return (
-    <section className={cn("story-chat-panel glass-panel flex min-h-[34rem] flex-col rounded-lg", isCompact ? "story-chat-panel--compact" : "")}>
+    <section className={cn("story-chat-panel glass-panel flex min-h-[34rem] flex-col rounded-lg", density === "compact" ? "story-chat-panel--compact" : "", density === "ultra" ? "story-chat-panel--ultra" : "")}>
       <header className="story-chat-header flex items-center justify-between border-b border-white/10 px-4 py-3">
         <div className="flex items-center gap-2">
           <MessageCircle size={18} className="text-brass" />
@@ -259,11 +261,14 @@ export function ChatPanel({
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="story-density-toggle inline-flex rounded-md border border-white/10 bg-black/20 p-0.5">
-            <button type="button" className={cn("rounded px-2 py-1 text-xs text-stone-300", !isCompact ? "bg-brass/20 text-brass" : "")} onClick={() => setChatDensity(false)}>
+            <button type="button" className={cn("rounded px-2 py-1 text-xs text-stone-300", density === "wide" ? "bg-brass/20 text-brass" : "")} onClick={() => setChatDensity("wide")}>
               Ampia
             </button>
-            <button type="button" className={cn("rounded px-2 py-1 text-xs text-stone-300", isCompact ? "bg-brass/20 text-brass" : "")} onClick={() => setChatDensity(true)}>
+            <button type="button" className={cn("rounded px-2 py-1 text-xs text-stone-300", density === "compact" ? "bg-brass/20 text-brass" : "")} onClick={() => setChatDensity("compact")}>
               Compatta
+            </button>
+            <button type="button" className={cn("rounded px-2 py-1 text-xs text-stone-300", density === "ultra" ? "bg-brass/20 text-brass" : "")} onClick={() => setChatDensity("ultra")}>
+              Ultra
             </button>
           </div>
           <span className="story-status-badge rounded-md border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200">
@@ -398,10 +403,10 @@ export function ChatPanel({
                 narrative.kind ? `story-message--narrative-${narrative.kind}` : "",
                 message.is_private ? "story-message--private" : "",
                 message.is_pinned ? "story-message--pinned" : "",
-                showAvatars ? "grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3" : ""
+                showAvatars && density !== "ultra" ? "grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3" : ""
               )}
             >
-              {showAvatars ? (
+              {showAvatars && density !== "ultra" ? (
                 <button
                   type="button"
                   onClick={() => handleAvatarClick(message)}

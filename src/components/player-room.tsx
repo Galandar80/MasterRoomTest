@@ -42,6 +42,7 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
   const [offText, setOffText] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("chat");
   const [utilityPanel, setUtilityPanel] = useState<UtilityPanel>(null);
+  const [sheetCharacterId, setSheetCharacterId] = useState<string | null>(null);
   const [immersiveMode, setImmersiveMode] = useState(false);
   const [damageFlash, setDamageFlash] = useState(false);
   const prevHpRef = useRef<number | undefined>(undefined);
@@ -75,7 +76,21 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
 
   const [leftCharacters, rightCharacters] = useMemo(() => splitSides(state.characters), [state.characters]);
   const currentCharacter = state.characters.find((character) => character.user_id === state.profile.id) ?? state.characters[0];
+  const sheetCharacter = state.characters.find((character) => character.id === sheetCharacterId) ?? currentCharacter;
+  const modalCharacter = utilityPanel === "sheet" ? sheetCharacter : currentCharacter;
   const currentCharacterHp = currentCharacter?.hp;
+
+  const openUtility = (panel: Exclude<UtilityPanel, null>) => {
+    if (panel === "sheet") {
+      setSheetCharacterId(currentCharacter?.id ?? null);
+    }
+    setUtilityPanel(panel);
+  };
+
+  const openCharacterSheet = (characterId: string) => {
+    setSheetCharacterId(characterId);
+    setUtilityPanel("sheet");
+  };
 
   useEffect(() => {
     if (currentCharacterHp !== undefined) {
@@ -134,13 +149,13 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
           onBack={onBack}
           privateCount={state.privateMessages.length}
           currentCharacter={currentCharacter}
-          onOpenUtility={setUtilityPanel}
+          onOpenUtility={openUtility}
           immersiveMode={immersiveMode}
           onToggleImmersive={() => setImmersiveMode((value) => !value)}
         />
-        <MobileCharacterStrip characters={state.characters} currentUserId={state.profile.id} />
+        <MobileCharacterStrip characters={state.characters} currentUserId={state.profile.id} onOpenCharacter={openCharacterSheet} />
         <div className={`grid gap-3 ${immersiveMode ? "xl:grid-cols-[minmax(0,1fr)]" : "xl:grid-cols-[17rem_minmax(0,1fr)_17rem]"}`}>
-      {immersiveMode ? null : <CharacterRail side="left" characters={leftCharacters} inventory={state.inventory} presence={state.presence} />}
+      {immersiveMode ? null : <CharacterRail side="left" characters={leftCharacters} inventory={state.inventory} presence={state.presence} onOpenCharacter={openCharacterSheet} />}
 
       <div className="grid min-w-0 gap-3">
         {spotlightVisible ? <SpotlightPanel room={state.room} npcs={state.npcs} currentUserId={state.profile.id} /> : null}
@@ -229,14 +244,14 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
         />
       </div>
 
-      {immersiveMode ? null : <CharacterRail side="right" characters={rightCharacters} inventory={state.inventory} presence={state.presence} />}
+      {immersiveMode ? null : <CharacterRail side="right" characters={rightCharacters} inventory={state.inventory} presence={state.presence} onOpenCharacter={openCharacterSheet} />}
         </div>
       </div>
-      {currentCharacter ? (
+      {modalCharacter ? (
         <PlayerUtilityModal
           panel={utilityPanel}
           state={state}
-          character={currentCharacter}
+          character={modalCharacter}
           onClose={() => setUtilityPanel(null)}
           onCreateNote={onCreateNote}
           onPrivateSend={onPrivateSend}
@@ -254,7 +269,7 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
         inviteCode={state.room.invite_code}
         immersiveMode={immersiveMode}
         onToggleImmersive={() => setImmersiveMode((value) => !value)}
-        onOpenUtility={setUtilityPanel}
+        onOpenUtility={openUtility}
         localVolume={localVolume}
         localMuted={localMuted}
         onVolumeChange={handleLocalVolumeChange}
@@ -351,17 +366,26 @@ function HeaderAction({ icon, label, badge, onClick }: { icon: React.ReactNode; 
   );
 }
 
-function MobileCharacterStrip({ characters, currentUserId }: { characters: RoomState["characters"]; currentUserId: string }) {
+function MobileCharacterStrip({ characters, currentUserId, onOpenCharacter }: { characters: RoomState["characters"]; currentUserId: string; onOpenCharacter: (characterId: string) => void }) {
   return (
     <section className="mobile-character-strip xl:hidden">
       {characters.map((character) => (
-        <article key={character.id} className={character.user_id === currentUserId ? "is-current" : ""}>
+        <button
+          key={character.id}
+          type="button"
+          onClick={() => {
+            playUiClick();
+            onOpenCharacter(character.id);
+          }}
+          onMouseEnter={playUiHover}
+          className={character.user_id === currentUserId ? "is-current" : ""}
+        >
           <span className="h-10 w-10 shrink-0 rounded-lg bg-cover bg-center" style={{ backgroundImage: `url(${character.portrait_url})` }} />
           <span className="min-w-0">
             <strong style={{ color: character.color }}>{character.character_name}</strong>
             <small>PF {character.hp} · {character.visible_status}</small>
           </span>
-        </article>
+        </button>
       ))}
     </section>
   );
