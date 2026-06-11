@@ -42,6 +42,7 @@ export function AuthGate({ children }: AuthGateProps) {
       const code = params.get("code");
       const urlError = params.get("error_description") ?? params.get("error");
       let hasSession = false;
+      let codeExchangeFailed = false;
 
       if (urlError) {
         setMessage(readAuthError(urlError));
@@ -59,12 +60,14 @@ export function AuthGate({ children }: AuthGateProps) {
         if (!active) return;
 
         if (error) {
+          codeExchangeFailed = true;
           setMessage(readAuthError(error.message));
         } else {
-          window.history.replaceState({}, document.title, window.location.pathname);
-          if (data.session?.user) {
+          const session = data.session ?? (await supabase!.auth.getSession()).data.session;
+          if (session?.user) {
             setIsAuthed(true);
             setIsBusy(false);
+            window.history.replaceState({}, document.title, window.location.pathname);
             return;
           }
         }
@@ -94,7 +97,7 @@ export function AuthGate({ children }: AuthGateProps) {
         }
       }
 
-      if (code && !hasSession) {
+      if (code && !hasSession && !codeExchangeFailed) {
         setMessage("Google ha risposto, ma Supabase non ha creato una sessione locale. Controlla Site URL e Redirect URLs in Supabase.");
       }
     }
@@ -327,6 +330,10 @@ function readAuthError(message: string) {
 
   if (normalized.includes("provider is not enabled") || normalized.includes("unsupported provider")) {
     return "Provider Google non abilitato in Supabase. Vai in Authentication > Providers > Google e inserisci Client ID e Client Secret.";
+  }
+
+  if (normalized.includes("code verifier") || normalized.includes("pkce") || normalized.includes("bad_code_verifier")) {
+    return "Accesso Google non completato: riprova con Continua con Google dalla stessa finestra del browser.";
   }
 
   return message;
