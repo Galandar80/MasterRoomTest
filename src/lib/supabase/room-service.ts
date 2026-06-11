@@ -579,14 +579,15 @@ export async function loadRoomState(supabase: DatabaseClient, roomId: string, pr
   const currentCharacter = characterList.find((character) => character.user_id === profile.id) ?? characterList[0];
   const characterIds = characterList.map((character) => character.id);
 
-  const [{ data: inventory }, { data: notes }] = currentCharacter
+  const [{ data: rawInventory }, { data: notes }] = currentCharacter
     ? await Promise.all([
-        isMaster && characterIds.length
+        characterIds.length
           ? supabase.from("inventory_items").select("*").in("character_id", characterIds).order("created_at", { ascending: true })
           : supabase.from("inventory_items").select("*").eq("character_id", currentCharacter.id).order("created_at", { ascending: true }),
         supabase.from("player_notes").select("*").eq("character_id", currentCharacter.id).order("updated_at", { ascending: false })
       ])
     : [{ data: [] }, { data: [] }];
+  const inventory = ((rawInventory ?? []) as InventoryItem[]).filter((item) => isMaster || item.character_id === currentCharacter?.id || item.is_public);
   const mapState = await fetchRoomMapState(supabase, room.id, isMaster);
 
   const sessionProfile: Profile = {

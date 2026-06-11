@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import type React from "react";
 import { ArrowLeft, Backpack, BookOpenText, CircleHelp, Copy, Eye, EyeOff, MapPinned, MessageCircle, Plus, ScrollText, UsersRound, X, UserRound, Lock, BookOpen, Heart, Sparkles, Bell, Check, ShieldAlert, Volume2, VolumeX } from "lucide-react";
 import type { AudioTrack, Message, RoomState } from "@/lib/types";
@@ -45,7 +45,10 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
   const [sheetCharacterId, setSheetCharacterId] = useState<string | null>(null);
   const [immersiveMode, setImmersiveMode] = useState(false);
   const [damageFlash, setDamageFlash] = useState(false);
+  const [seenPrivateIds, setSeenPrivateIds] = useState<Set<string>>(new Set());
+  const [seenInventoryIds, setSeenInventoryIds] = useState<Set<string>>(new Set());
   const prevHpRef = useRef<number | undefined>(undefined);
+  const notificationBaselineRef = useRef(false);
   
   // Lifted local audio states
   const [localVolume, setLocalVolume] = useState<number>(55);
@@ -79,11 +82,38 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
   const sheetCharacter = state.characters.find((character) => character.id === sheetCharacterId) ?? currentCharacter;
   const modalCharacter = utilityPanel === "sheet" ? sheetCharacter : currentCharacter;
   const currentCharacterHp = currentCharacter?.hp;
+  const incomingPrivateMessages = useMemo(
+    () => state.privateMessages.filter((message) => message.sender_user_id !== state.profile.id),
+    [state.privateMessages, state.profile.id]
+  );
+  const currentCharacterItems = useMemo(
+    () => (currentCharacter ? state.inventory.filter((item) => item.character_id === currentCharacter.id) : []),
+    [currentCharacter, state.inventory]
+  );
+  const unreadPrivateCount = incomingPrivateMessages.filter((message) => !seenPrivateIds.has(message.id)).length;
+  const unreadInventoryCount = currentCharacterItems.filter((item) => !seenInventoryIds.has(item.id)).length;
+
+  useEffect(() => {
+    if (notificationBaselineRef.current) return;
+    notificationBaselineRef.current = true;
+    setSeenPrivateIds(new Set(incomingPrivateMessages.map((message) => message.id)));
+    setSeenInventoryIds(new Set(currentCharacterItems.map((item) => item.id)));
+  }, [incomingPrivateMessages, currentCharacterItems]);
+
+  const markPrivateSeen = useCallback(() => {
+    setSeenPrivateIds(new Set(incomingPrivateMessages.map((message) => message.id)));
+  }, [incomingPrivateMessages]);
+
+  const markInventorySeen = useCallback(() => {
+    setSeenInventoryIds(new Set(currentCharacterItems.map((item) => item.id)));
+  }, [currentCharacterItems]);
 
   const openUtility = (panel: Exclude<UtilityPanel, null>) => {
     if (panel === "sheet") {
       setSheetCharacterId(currentCharacter?.id ?? null);
     }
+    if (panel === "private") markPrivateSeen();
+    if (panel === "inventory") markInventorySeen();
     setUtilityPanel(panel);
   };
 
@@ -103,6 +133,11 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
       prevHpRef.current = currentCharacterHp;
     }
   }, [currentCharacterHp]);
+
+  useEffect(() => {
+    if (mobileTab === "private") markPrivateSeen();
+    if (mobileTab === "sheet") markInventorySeen();
+  }, [markInventorySeen, markPrivateSeen, mobileTab]);
   const visibleDiceRequests = state.diceRequests.filter((request) => !request.target_user_id || request.target_user_id === state.profile.id);
   const spotlightVisible = state.room.spotlight_visibility !== "off" && Boolean(state.room.spotlight_npc_id);
   const soundEffectVisible = Boolean(state.room.current_sound_effect_id);
@@ -147,7 +182,8 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
         <PlayerHeader
           state={state}
           onBack={onBack}
-          privateCount={state.privateMessages.length}
+          privateCount={unreadPrivateCount}
+          inventoryCount={unreadInventoryCount}
           currentCharacter={currentCharacter}
           onOpenUtility={openUtility}
           immersiveMode={immersiveMode}
@@ -270,6 +306,12 @@ export function PlayerRoom({ state, currentAudio, onBack, onSend, onPrivateSend,
         immersiveMode={immersiveMode}
         onToggleImmersive={() => setImmersiveMode((value) => !value)}
         onOpenUtility={openUtility}
+        unreadPrivateCount={unreadPrivateCount}
+        unreadInventoryCount={unreadInventoryCount}
+        onMarkNotificationsSeen={() => {
+          markPrivateSeen();
+          markInventorySeen();
+        }}
         localVolume={localVolume}
         localMuted={localMuted}
         onVolumeChange={handleLocalVolumeChange}
@@ -283,6 +325,7 @@ function PlayerHeader({
   state,
   onBack,
   privateCount,
+  inventoryCount,
   currentCharacter,
   onOpenUtility,
   immersiveMode,
@@ -291,6 +334,7 @@ function PlayerHeader({
   state: RoomState;
   onBack: () => void;
   privateCount: number;
+  inventoryCount: number;
   currentCharacter?: RoomState["characters"][number];
   onOpenUtility: (panel: Exclude<UtilityPanel, null>) => void;
   immersiveMode: boolean;
@@ -329,7 +373,7 @@ function PlayerHeader({
           ) : null}
           <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
             <HeaderAction icon={<ScrollText size={16} />} label="Note" onClick={() => onOpenUtility("notes")} />
-            <HeaderAction icon={<Backpack size={16} />} label="Inventario" onClick={() => onOpenUtility("inventory")} />
+            <HeaderAction icon={<Backpack size={16} />} label="Inventario" badge={inventoryCount} onClick={() => onOpenUtility("inventory")} />
             <HeaderAction icon={<BookOpenText size={16} />} label="Sussurri" badge={privateCount} onClick={() => onOpenUtility("private")} />
             <HeaderAction icon={<MapPinned size={16} />} label="Mappa" onClick={() => onOpenUtility("map")} />
             <HeaderAction icon={immersiveMode ? <EyeOff size={16} /> : <Eye size={16} />} label={immersiveMode ? "UI" : "Immersione"} onClick={onToggleImmersive} />
@@ -767,6 +811,9 @@ type PlayerActionHotbarProps = {
   immersiveMode: boolean;
   onToggleImmersive: () => void;
   onOpenUtility: (panel: Exclude<UtilityPanel, null>) => void;
+  unreadPrivateCount: number;
+  unreadInventoryCount: number;
+  onMarkNotificationsSeen: () => void;
   localVolume: number;
   localMuted: boolean;
   onVolumeChange: (vol: number) => void;
@@ -784,6 +831,9 @@ function PlayerActionHotbar({
   immersiveMode,
   onToggleImmersive,
   onOpenUtility,
+  unreadPrivateCount,
+  unreadInventoryCount,
+  onMarkNotificationsSeen,
   localVolume,
   localMuted,
   onVolumeChange,
@@ -796,8 +846,7 @@ function PlayerActionHotbar({
   );
   const spotlightVisible = state.room.spotlight_visibility !== "off" && Boolean(state.room.spotlight_npc_id);
   const spotlightNpc = spotlightVisible ? state.npcs.find((n) => n.id === state.room.spotlight_npc_id) : null;
-  const privateCount = state.privateMessages.length;
-  const totalNotifications = visibleDiceRequests.length + (spotlightVisible ? 1 : 0);
+  const totalNotifications = visibleDiceRequests.length + (spotlightVisible ? 1 : 0) + unreadPrivateCount + unreadInventoryCount;
 
   return (
     <div className="player-action-hotbar fixed bottom-4 left-1/2 z-40 -translate-x-1/2 flex items-center gap-3 ui-hotbar-panel shadow-2xl transition-all duration-300">
@@ -806,7 +855,12 @@ function PlayerActionHotbar({
       <div className="relative">
         <button
           type="button"
-          onClick={() => { setShowNotifications(!showNotifications); playUiClick(); }}
+          onClick={() => {
+            const nextVisible = !showNotifications;
+            setShowNotifications(nextVisible);
+            if (nextVisible) onMarkNotificationsSeen();
+            playUiClick();
+          }}
           onMouseEnter={playUiHover}
           className={`relative flex h-8 w-8 items-center justify-center rounded-full border transition ${showNotifications ? "border-brass bg-brass/20 text-brass" : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass"}`}
           title="Notifiche attive"
@@ -841,7 +895,19 @@ function PlayerActionHotbar({
                   <span>L&apos;NPC <strong>{spotlightNpc.name}</strong> è in evidenza scenica.</span>
                 </div>
               )}
-              {privateCount > 0 && (
+              {unreadInventoryCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { onOpenUtility("inventory"); setShowNotifications(false); playUiClick(); }}
+                  className="w-full flex flex-col gap-0.5 text-left rounded bg-white/[0.02] border border-white/5 p-2 text-[11px] text-slate-300 hover:bg-brass/10 hover:border-brass/20 transition"
+                >
+                  <span className="font-semibold text-amber-300 flex items-center gap-1">
+                    <Backpack size={11} /> Inventario
+                  </span>
+                  <span>Hai <strong>{unreadInventoryCount}</strong> nuovo{unreadInventoryCount === 1 ? "" : "i"} oggetto{unreadInventoryCount === 1 ? "" : "i"} assegnato{unreadInventoryCount === 1 ? "" : "i"}.</span>
+                </button>
+              )}
+              {unreadPrivateCount > 0 && (
                 <button
                   type="button"
                   onClick={() => { onOpenUtility("private"); setShowNotifications(false); playUiClick(); }}
@@ -850,7 +916,7 @@ function PlayerActionHotbar({
                   <span className="font-semibold text-sky-300 flex items-center gap-1">
                     <MessageCircle size={11} /> Sussurri Master
                   </span>
-                  <span>Hai <strong>{privateCount}</strong> messaggi privati scambiati col Master.</span>
+                  <span>Hai <strong>{unreadPrivateCount}</strong> nuovo{unreadPrivateCount === 1 ? "" : "i"} messaggio{unreadPrivateCount === 1 ? "" : "i"} privato{unreadPrivateCount === 1 ? "" : "i"}.</span>
                 </button>
               )}
               {totalNotifications === 0 && (

@@ -65,6 +65,7 @@ export function ChatPanel({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [density, setDensity] = useState<ChatDensity>("wide");
   const [failedAvatarUrls, setFailedAvatarUrls] = useState<Set<string>>(new Set());
+  const composeRef = useRef<HTMLTextAreaElement | null>(null);
   const [activeProfile, setActiveProfile] = useState<{
     name: string;
     avatarUrl: string;
@@ -205,6 +206,27 @@ export function ChatPanel({
     if (typeof window !== "undefined") {
       localStorage.setItem("gdr_chat_density", nextDensity);
     }
+  };
+
+  const insertNarrativeTag = (tag: string) => {
+    const textarea = composeRef.current;
+    const token = `[${tag}] `;
+    if (!textarea) {
+      onChange(value ? `${value} ${token}` : token);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? value.length;
+    const prefix = value.slice(0, start);
+    const suffix = value.slice(end);
+    const nextValue = `${prefix}${prefix && !prefix.endsWith("\n") && !prefix.endsWith(" ") ? " " : ""}${token}${suffix}`;
+    const nextCursor = `${prefix}${prefix && !prefix.endsWith("\n") && !prefix.endsWith(" ") ? " " : ""}${token}`.length;
+    onChange(nextValue);
+    window.setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
   };
 
   // Sound effects trigger for incoming messages
@@ -498,7 +520,7 @@ export function ChatPanel({
                     {replyInfo.replyToId ? (() => {
                       const parentMsg = messages.find((m) => m.id === replyInfo.replyToId);
                       const parentText = parentMsg
-                        ? getVisibleMessageContent(parentMsg.content).replace(/^\[(azione|pensiero|evento|capitolo|sussurro)\]\s*/i, "")
+                        ? getVisibleMessageContent(parentMsg.content).replace(/^\[(dialogo|azione|pensiero|evento|capitolo|sussurro)\]\s*/i, "")
                         : "[Messaggio non trovato]";
                       return (
                         <div className="mb-1.5 flex items-center gap-1.5 rounded chat-reply-quote border-l-2 px-2 py-1 text-xs text-stone-400 select-none">
@@ -514,7 +536,8 @@ export function ChatPanel({
 
                     <p className="whitespace-pre-wrap text-sm leading-6 text-white">
                       {!meta.isDice && narrative.label ? <span className="story-narrative-label">{narrative.label}</span> : null}
-                      {meta.isDice ? getVisibleMessageContent(message.content) : narrative.wrap ? <>“{narrative.content}”</> : narrative.content} {message.edited_at ? <span className="text-xs text-slate-500">(modificato)</span> : null}
+                      {meta.isDice ? getVisibleMessageContent(message.content) : renderNarrativeSegments(narrative.content, narrative.wrap, narrative.kind)}
+                      {message.edited_at ? <span className="text-xs text-slate-500"> (modificato)</span> : null}
                     </p>
                     {canReplyToMessage ? (
                       <button
@@ -560,7 +583,7 @@ export function ChatPanel({
         {replyTo ? (
           <div className="mb-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-stone-400">
             <span className="truncate">
-              Risposta a <strong style={{ color: replyTo.sender_color }}>{replyTo.sender_display_name}</strong>: &ldquo;{getVisibleMessageContent(replyTo.content).replace(/^\[(azione|pensiero|evento|capitolo|sussurro)\]\s*/i, "").slice(0, 45)}&rdquo;
+              Risposta a <strong style={{ color: replyTo.sender_color }}>{replyTo.sender_display_name}</strong>: &ldquo;{getVisibleMessageContent(replyTo.content).replace(/^\[(dialogo|azione|pensiero|evento|capitolo|sussurro)\]\s*/i, "").slice(0, 45)}&rdquo;
             </span>
             <button
               type="button"
@@ -615,7 +638,7 @@ export function ChatPanel({
               key={mode.id}
               type="button"
               className="story-compose-mode"
-              onClick={() => onChange(applyNarrativePrefix(value, mode.prefix))}
+              onClick={() => insertNarrativeTag(mode.tag)}
               disabled={disabled}
             >
               {mode.label}
@@ -624,6 +647,7 @@ export function ChatPanel({
         </div>
         <div className="flex gap-2">
           <textarea
+            ref={composeRef}
             className="field min-h-12 flex-1 resize-none px-3 py-3 text-sm"
             placeholder={disabled ? (disabledReason ?? "Chat disattivata dal Master") : "Scrivi in scena... Shift+Invio va a capo"}
             value={value}
@@ -832,19 +856,14 @@ function messageMeta(message: Message) {
 }
 
 const narrativeModes = [
-  { id: "dialogue", label: "Dialogo", prefix: "" },
-  { id: "action", label: "Azione", prefix: "[azione] " },
-  { id: "thought", label: "Pensiero", prefix: "[pensiero] " },
-  { id: "event", label: "Evento", prefix: "[evento] " }
+  { id: "dialogue", label: "Dialogo", tag: "dialogo" },
+  { id: "action", label: "Azione", tag: "azione" },
+  { id: "thought", label: "Pensiero", tag: "pensiero" },
+  { id: "event", label: "Evento", tag: "evento" }
 ];
 
-function applyNarrativePrefix(value: string, prefix: string) {
-  const stripped = value.replace(/^\[(azione|pensiero|evento|capitolo|sussurro)\]\s*/i, "");
-  return `${prefix}${stripped}`.trimStart();
-}
-
 function parseNarrativeContent(content: string) {
-  const match = content.match(/^\[(azione|pensiero|evento|capitolo|sussurro)\]\s*(.*)$/i);
+  const match = content.match(/^\[(dialogo|azione|pensiero|evento|capitolo|sussurro)\]\s*(.*)$/i);
   if (!match) {
     return { kind: "", label: "", content, wrap: false };
   }
@@ -859,12 +878,46 @@ function parseNarrativeContent(content: string) {
 }
 
 function narrativeLabel(kind: string) {
+  if (kind === "dialogo") return "Dialogo";
   if (kind === "azione") return "Azione";
   if (kind === "pensiero") return "Pensiero";
   if (kind === "evento") return "Evento";
   if (kind === "capitolo") return "Capitolo";
   if (kind === "sussurro") return "Sussurro";
   return "";
+}
+
+function renderNarrativeSegments(content: string, wrap = false, fallbackKind = "") {
+  const segments = parseNarrativeSegments(content, fallbackKind);
+  return segments.map((segment, index) => {
+    const text = wrap ? `“${segment.text}”` : segment.text;
+    if (!segment.kind) return <span key={index}>{text}</span>;
+    return (
+      <span key={index} className={`story-narrative-part story-narrative-part--${segment.kind}`}>
+        {text}
+      </span>
+    );
+  });
+}
+
+function parseNarrativeSegments(content: string, fallbackKind = "") {
+  const tagPattern = /\[(dialogo|azione|pensiero|evento|capitolo|sussurro)\]\s*/gi;
+  const matches = [...content.matchAll(tagPattern)];
+  if (!matches.length) return [{ kind: fallbackKind, text: content }];
+
+  const segments: Array<{ kind: string; text: string }> = [];
+  if ((matches[0].index ?? 0) > 0) {
+    segments.push({ kind: "", text: content.slice(0, matches[0].index) });
+  }
+
+  matches.forEach((match, index) => {
+    const start = (match.index ?? 0) + match[0].length;
+    const end = matches[index + 1]?.index ?? content.length;
+    const text = content.slice(start, end);
+    if (text) segments.push({ kind: match[1].toLowerCase(), text });
+  });
+
+  return segments;
 }
 
 function resolveChatAvatar(message: Message, characters: Character[], npcs: Npc[]) {

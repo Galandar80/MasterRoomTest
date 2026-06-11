@@ -403,6 +403,13 @@ export function AppShell() {
         }
       )
       .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventory_items" },
+        (payload) => {
+          setRoomState((state) => updateInventoryEvent(state, payload));
+        }
+      )
+      .on(
         "broadcast",
         { event: "map-sync" },
         (response) => {
@@ -2461,7 +2468,8 @@ type CollectionKey =
   | "scenes"
   | "audioTracks"
   | "soundEffects"
-  | "characters";
+  | "characters"
+  | "inventory";
 
 function updateCollectionEvent(
   state: RoomState,
@@ -2485,6 +2493,31 @@ function updateCollectionEvent(
   });
 
   return { ...state, [key]: sorted };
+}
+
+function updateInventoryEvent(
+  state: RoomState,
+  payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }
+) {
+  const characterIds = new Set(state.characters.map((character) => character.id));
+  const currentCharacter = state.characters.find((character) => character.user_id === state.profile.id);
+  const isMaster = state.profile.role === "master" || state.campaigns.some((campaign) => campaign.master_id === state.profile.id);
+
+  if (payload.eventType === "DELETE") {
+    return { ...state, inventory: state.inventory.filter((item) => item.id !== payload.old.id) };
+  }
+
+  const incoming = payload.new as InventoryItem;
+  if (!characterIds.has(incoming.character_id)) return state;
+  if (!isMaster && incoming.character_id !== currentCharacter?.id && !incoming.is_public) {
+    return { ...state, inventory: state.inventory.filter((item) => item.id !== incoming.id) };
+  }
+
+  const merged = state.inventory.some((item) => item.id === incoming.id)
+    ? state.inventory.map((item) => (item.id === incoming.id ? incoming : item))
+    : [...state.inventory, incoming];
+
+  return { ...state, inventory: merged.sort((a, b) => a.name.localeCompare(b.name)) };
 }
 
 function buildMapSyncPayload(state: RoomState): MapSyncPayload {

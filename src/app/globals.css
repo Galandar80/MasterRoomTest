@@ -3522,6 +3522,33 @@ button:active {
   text-transform: uppercase;
 }
 
+.story-narrative-part {
+  font-weight: 600;
+}
+
+.story-narrative-part--dialogo {
+  color: #ffffff;
+}
+
+.story-narrative-part--azione {
+  color: #c084fc;
+}
+
+.story-narrative-part--pensiero {
+  color: #fb923c;
+  font-style: italic;
+}
+
+.story-narrative-part--evento,
+.story-narrative-part--capitolo {
+  color: rgb(var(--color-brass-rgb));
+}
+
+.story-narrative-part--sussurro {
+  color: #93c5fd;
+  font-style: italic;
+}
+
 .story-message--narrative-azione .story-message-content {
   color: rgb(226, 232, 240);
   font-style: italic;
@@ -4514,6 +4541,20 @@ select.field:focus {
 }
 .story-message--narrative-evento::before {
   background: linear-gradient(180deg, #f59e0b, #b45309) !important;
+}
+
+.story-message-content .story-narrative-part--dialogo {
+  color: #ffffff !important;
+  font-style: normal;
+}
+
+.story-message-content .story-narrative-part--azione {
+  color: #c084fc !important;
+}
+
+.story-message-content .story-narrative-part--pensiero {
+  color: #fb923c !important;
+  font-style: italic;
 }
 
 /* Threading replies quote box */
