@@ -234,6 +234,19 @@ export function AppShell() {
     }
   }
 
+  async function broadcastInventorySync(action: "upsert" | "delete", item: InventoryItem) {
+    if (!supabase || demoMode) return;
+
+    const channel = realtimeChannelRef.current;
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "inventory-sync",
+        payload: { action, item }
+      });
+    }
+  }
+
   useEffect(() => {
     if (!supabase || demoMode) {
       setIsLoading(false);
@@ -427,6 +440,16 @@ export function AppShell() {
           const payload = response.payload as { cueId: string; tone: string; message: string };
           if (payload) {
             triggerDirectorCueLocally(payload.cueId, payload.tone, payload.message);
+          }
+        }
+      )
+      .on(
+        "broadcast",
+        { event: "inventory-sync" },
+        (response) => {
+          const payload = response.payload as { action?: "upsert" | "delete"; item?: InventoryItem };
+          if (payload?.item) {
+            setRoomState((state) => applyInventorySync(state, payload.action ?? "upsert", payload.item!));
           }
         }
       );
@@ -1373,6 +1396,7 @@ export function AppShell() {
       if (supabase && !demoMode) {
         const item = await createInventoryItem(supabase, characterId, values);
         setRoomState((state) => ({ ...state, inventory: [...state.inventory, item] }));
+        await broadcastInventorySync("upsert", item);
       } else {
         setRoomState((state) => ({
           ...state,
@@ -1407,6 +1431,7 @@ export function AppShell() {
       setError("");
       if (supabase && !demoMode) {
         await deleteInventoryItem(supabase, item);
+        await broadcastInventorySync("delete", item);
       }
       setRoomState((state) => ({ ...state, inventory: state.inventory.filter((inventoryItem) => inventoryItem.id !== item.id) }));
       setStatus("Oggetto rimosso dall'inventario");
@@ -2499,15 +2524,22 @@ function updateInventoryEvent(
   state: RoomState,
   payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }
 ) {
+  if (payload.eventType === "DELETE") {
+    return applyInventorySync(state, "delete", payload.old as InventoryItem);
+  }
+
+  return applyInventorySync(state, "upsert", payload.new as InventoryItem);
+}
+
+function applyInventorySync(state: RoomState, action: "upsert" | "delete", incoming: InventoryItem) {
   const characterIds = new Set(state.characters.map((character) => character.id));
   const currentCharacter = state.characters.find((character) => character.user_id === state.profile.id);
   const isMaster = state.profile.role === "master" || state.campaigns.some((campaign) => campaign.master_id === state.profile.id);
 
-  if (payload.eventType === "DELETE") {
-    return { ...state, inventory: state.inventory.filter((item) => item.id !== payload.old.id) };
+  if (action === "delete") {
+    return { ...state, inventory: state.inventory.filter((item) => item.id !== incoming.id) };
   }
 
-  const incoming = payload.new as InventoryItem;
   if (!characterIds.has(incoming.character_id)) return state;
   if (!isMaster && incoming.character_id !== currentCharacter?.id && !incoming.is_public) {
     return { ...state, inventory: state.inventory.filter((item) => item.id !== incoming.id) };

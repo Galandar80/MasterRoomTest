@@ -535,7 +535,6 @@ export function ChatPanel({
                     })() : null}
 
                     <p className="whitespace-pre-wrap text-sm leading-6 text-white">
-                      {!meta.isDice && narrative.label ? <span className="story-narrative-label">{narrative.label}</span> : null}
                       {meta.isDice ? getVisibleMessageContent(message.content) : renderNarrativeSegments(narrative.content, narrative.wrap, narrative.kind)}
                       {message.edited_at ? <span className="text-xs text-slate-500"> (modificato)</span> : null}
                     </p>
@@ -907,7 +906,7 @@ function parseNarrativeSegments(content: string, fallbackKind = "") {
 
   const segments: Array<{ kind: string; text: string }> = [];
   if ((matches[0].index ?? 0) > 0) {
-    segments.push({ kind: "", text: content.slice(0, matches[0].index) });
+    segments.push({ kind: fallbackKind, text: content.slice(0, matches[0].index) });
   }
 
   matches.forEach((match, index) => {
