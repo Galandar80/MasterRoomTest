@@ -26,7 +26,7 @@ import type {
   Scene,
   SoundEffect
 } from "@/lib/types";
-import { isConfiguredSuperadmin } from "@/lib/superadmin";
+import { hasSuperadminClaim, isConfiguredSuperadmin } from "@/lib/superadmin";
 
 type DatabaseClient = SupabaseClient;
 const ROOM_MESSAGE_PAGE_SIZE = 150;
@@ -79,7 +79,7 @@ export async function ensureProfile(supabase: DatabaseClient, user: User): Promi
   }
 
   if (existing) {
-    return existing as Profile;
+    return { ...(existing as Profile), is_superadmin: fallback.is_superadmin };
   }
 
   const { data, error } = await supabase
@@ -108,7 +108,8 @@ export function profileFromUser(user: User): Profile {
     id: user.id,
     email,
     username,
-    role: "player"
+    role: "player",
+    is_superadmin: hasSuperadminClaim(user)
   };
 }
 

@@ -16,6 +16,7 @@ export type Profile = {
   email: string;
   username: string;
   role: UserRole;
+  is_superadmin?: boolean;
 };
 
 export type Campaign = {
