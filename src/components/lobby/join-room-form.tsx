@@ -18,16 +18,21 @@ export function JoinRoomForm({ room, onBack, onJoin }: JoinRoomFormProps) {
   const [error, setError] = useState("");
   const [isJoining, setIsJoining] = useState(false);
 
+  function submitJoin() {
+    if (isJoining) return;
+    setIsJoining(true);
+    Promise.resolve(onJoin(code, mode))
+      .then((joined) => setError(joined ? "" : "Codice stanza non trovato."))
+      .finally(() => setIsJoining(false));
+  }
+
   return (
     <section className="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-xl items-center p-4">
-      <div
+      <form
         className="ui-panel-window w-full rounded-xl p-8 relative flex flex-col gap-4 text-white shadow-2xl"
         onSubmit={(event) => {
           event.preventDefault();
-          setIsJoining(true);
-          Promise.resolve(onJoin(code, mode))
-            .then((joined) => setError(joined ? "" : "Codice stanza non trovato."))
-            .finally(() => setIsJoining(false));
+          submitJoin();
         }}
       >
         <button
@@ -77,6 +82,8 @@ export function JoinRoomForm({ room, onBack, onJoin }: JoinRoomFormProps) {
             value={code}
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             placeholder="VEY-R03"
+            autoComplete="one-time-code"
+            required
           />
         </label>
 
@@ -87,15 +94,9 @@ export function JoinRoomForm({ room, onBack, onJoin }: JoinRoomFormProps) {
         ) : null}
 
         <button
-          type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            setIsJoining(true);
-            Promise.resolve(onJoin(code, mode))
-              .then((joined) => setError(joined ? "" : "Codice stanza non trovato."))
-              .finally(() => setIsJoining(false));
-          }}
+          type="submit"
           className="mt-4 w-full flex items-center justify-center gap-2 ui-btn-fantasy py-3"
+          disabled={isJoining || !code.trim()}
         >
           <DoorOpen size={16} />{" "}
           {isJoining
@@ -104,7 +105,7 @@ export function JoinRoomForm({ room, onBack, onJoin }: JoinRoomFormProps) {
               ? "Rientra come Master"
               : "Entra come eroe"}
         </button>
-      </div>
+      </form>
     </section>
   );
 }

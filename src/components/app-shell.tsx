@@ -1,18 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, LogOut, MessageSquareText, Sparkles, X } from "lucide-react";
-import { CampaignLobby } from "@/components/campaign-lobby";
 import { CharacterSetupForm, type CharacterSetupValues } from "@/components/lobby/character-setup-form";
 import { CreateGameForm, type CreateGameValues } from "@/components/lobby/create-game-form";
 import { JoinRoomForm, type JoinMode } from "@/components/lobby/join-room-form";
 import { StartMenu } from "@/components/lobby/start-menu";
-import { MasterControlRoom } from "@/components/master-control-room";
-import { PlayerRoom } from "@/components/player-room";
-import { SuperAdminRooms } from "@/components/superadmin-rooms";
 import { demoRoomState } from "@/lib/demo-data";
 import { cardDeckLabel, drawCard, encodeDiceReason, getDiceCount, rollDice as rollDiceValues, stripDiceCountMarker, type CardDeckType } from "@/lib/game-random";
 import { clearSupabaseAuthStorage, createClient, demoMode } from "@/lib/supabase/client";
+import { isConfiguredSuperadmin } from "@/lib/superadmin";
 import { playUiCinematicDanger, playUiCinematicReveal, playUiCinematicVision, playUiCinematicChapter, playUiCinematicEarthquake } from "@/lib/sound-generator";
 import {
   createGameInSupabase,
@@ -74,6 +72,19 @@ import {
 } from "@/lib/supabase/room-service";
 import type { AdminMediaOverview, AdminRoomOverview } from "@/lib/supabase/room-service";
 import type { AudioTrack, DiceRequest, InventoryItem, MapCharacterPosition, MapFogArea, MediaAsset, Message, NarrativeMap, Npc, Room, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
+
+const MasterControlRoom = dynamic(
+  () => import("@/components/master-control-room").then((module) => module.MasterControlRoom),
+  { loading: () => <AppLoading status="Caricamento cabina di regia..." /> }
+);
+const PlayerRoom = dynamic(
+  () => import("@/components/player-room").then((module) => module.PlayerRoom),
+  { loading: () => <AppLoading status="Caricamento stanza giocatore..." /> }
+);
+const SuperAdminRooms = dynamic(
+  () => import("@/components/superadmin-rooms").then((module) => module.SuperAdminRooms),
+  { loading: () => <AppLoading status="Caricamento pannello superadmin..." /> }
+);
 
 type View = "menu" | "create" | "join" | "character" | "player" | "master" | "superadmin";
 type CinematicEvent =
@@ -138,7 +149,7 @@ export function AppShell() {
   const isCurrentMaster = roomState.profile.role === "master";
   const isCurrentPlayer = roomState.profile.role === "player";
   const hasCurrentSession = demoMode || roomState.room.id !== demoRoomState.room.id;
-  const isSuperAdmin = roomState.profile.email.toLowerCase() === "galandar@gmail.com";
+  const isSuperAdmin = isConfiguredSuperadmin(roomState.profile);
 
   function logAction(label: string, detail?: string) {
     setActionLog((items) => [{ id: crypto.randomUUID(), label, detail, created_at: new Date().toISOString() }, ...items].slice(0, 12));
@@ -634,7 +645,7 @@ export function AppShell() {
 
   async function openSuperAdminPanel() {
     if (!isSuperAdmin || !supabase || demoMode) {
-      setError("Pannello superadmin disponibile solo per galandar@gmail.com con Supabase attivo.");
+      setError("Pannello superadmin disponibile solo per gli account configurati in NEXT_PUBLIC_SUPERADMIN_EMAILS con Supabase attivo.");
       return;
     }
 
@@ -1034,7 +1045,6 @@ export function AppShell() {
       setError("");
       let imageUrl = values.imageUrl;
       let videoUrl = values.videoUrl ?? "";
-      console.log("[updateMasterScene] START — sceneId:", sceneId, "title:", values.title, "supabase:", !!supabase, "demoMode:", demoMode, "isCurrentMaster:", isCurrentMaster);
       if (supabase && !demoMode) {
         if (values.imageFile) {
           imageUrl = await uploadPublicFile(supabase, "scene-images", values.imageFile, `rooms/${roomState.room.id}/scenes`);
@@ -1080,8 +1090,8 @@ export function AppShell() {
               tags: ["scena"]
             });
             setRoomState((state) => ({ ...state, mediaAssets: [asset, ...state.mediaAssets.filter((item) => item.id !== asset.id)] }));
-          } catch (assetErr) {
-            console.warn("[updateMasterScene] createMediaAsset failed (non-blocking):", assetErr);
+          } catch {
+            // Media-library sync is best effort; the scene itself has already been saved.
           }
         }
       } else {
@@ -1110,7 +1120,6 @@ export function AppShell() {
       }
       setStatus("Scena modificata");
     } catch (sceneError) {
-      console.error("[updateMasterScene] ERROR:", sceneError);
       setError(readError(sceneError));
     }
   }
@@ -2432,7 +2441,7 @@ function AppLoading({ status }: { status: string }) {
 
 function StatusBar({ status, error, onSignOut }: { status: string; error: string; onSignOut: () => void }) {
   return (
-    <div className={`app-status-bar ${error ? "is-error" : ""}`}>
+    <div className={`app-status-bar ${error ? "is-error" : ""}`} role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"}>
       <div className="app-status-content">
         <span className="app-status-icon" aria-hidden="true">
           {error ? <AlertTriangle size={16} /> : status.toLowerCase().includes("caric") ? <Sparkles size={16} /> : <CheckCircle2 size={16} />}

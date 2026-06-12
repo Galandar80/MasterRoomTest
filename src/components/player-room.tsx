@@ -864,6 +864,8 @@ function PlayerActionHotbar({
           onMouseEnter={playUiHover}
           className={`relative flex h-8 w-8 items-center justify-center rounded-full border transition ${showNotifications ? "border-brass bg-brass/20 text-brass" : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass"}`}
           title="Notifiche attive"
+          aria-label="Apri notifiche attive"
+          aria-expanded={showNotifications}
         >
           <Bell size={14} />
           {totalNotifications > 0 && (
@@ -939,6 +941,7 @@ function PlayerActionHotbar({
           onMouseEnter={playUiHover}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass transition-all duration-200"
           title="Apri Scheda Eroe"
+          aria-label="Apri scheda eroe"
         >
           <UserRound size={14} />
         </button>
@@ -949,6 +952,7 @@ function PlayerActionHotbar({
           onMouseEnter={playUiHover}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass transition-all duration-200"
           title="Apri Inventario"
+          aria-label="Apri inventario"
         >
           <Backpack size={14} />
         </button>
@@ -959,6 +963,7 @@ function PlayerActionHotbar({
           onMouseEnter={playUiHover}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass transition-all duration-200"
           title="Apri Mappa"
+          aria-label="Apri mappa"
         >
           <MapPinned size={14} />
         </button>
@@ -969,6 +974,7 @@ function PlayerActionHotbar({
           onMouseEnter={playUiHover}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass transition-all duration-200"
           title="Apri Note personali"
+          aria-label="Apri note personali"
         >
           <ScrollText size={14} />
         </button>
@@ -979,6 +985,7 @@ function PlayerActionHotbar({
           onMouseEnter={playUiHover}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass transition-all duration-200"
           title="Invia sussurro al Master"
+          aria-label="Apri sussurri con il Master"
         >
           <BookOpenText size={14} />
         </button>
@@ -1026,6 +1033,8 @@ function PlayerActionHotbar({
           onMouseEnter={playUiHover}
           className={`flex h-8 w-8 items-center justify-center rounded-full transition ${immersiveMode ? "bg-brass/15 text-brass" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
           title={immersiveMode ? "Mostra interfaccia" : "Nascondi interfaccia (Immersione)"}
+          aria-label={immersiveMode ? "Mostra interfaccia" : "Nascondi interfaccia in modalità immersione"}
+          aria-pressed={immersiveMode}
         >
           {immersiveMode ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
@@ -1039,6 +1048,7 @@ function PlayerActionHotbar({
           onMouseEnter={playUiHover}
           className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-white/5 hover:text-white transition"
           title="Copia codice invito"
+          aria-label="Copia codice invito"
         >
           <Copy size={14} />
         </button>

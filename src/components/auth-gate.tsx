@@ -256,7 +256,15 @@ export function AuthGate({ children }: AuthGateProps) {
 
           <label className="space-y-2 text-sm text-slate-200">
             Email
-            <input className="field px-3 py-3" value={email} onChange={(event) => setEmail(event.target.value)} />
+            <input
+              className="field px-3 py-3"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
           </label>
 
           <label className="space-y-2 text-sm text-slate-200">
@@ -264,6 +272,9 @@ export function AuthGate({ children }: AuthGateProps) {
             <input
               className="field px-3 py-3"
               type="password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              required
+              minLength={6}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />

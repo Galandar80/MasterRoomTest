@@ -2340,8 +2340,7 @@ function SoundbarModal({
       for (const sound of defaultSounds) {
         await onCreateSoundEffect(sound);
       }
-    } catch (err) {
-      console.error("Failed to load default sound effects:", err);
+    } catch {
     } finally {
       setIsInitializing(false);
     }
@@ -2975,6 +2974,8 @@ function MasterActionHotbar({
               : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-brass/30 hover:bg-brass/15 hover:text-brass"
           }`}
           title="Notifiche attive"
+          aria-label="Apri notifiche Master"
+          aria-expanded={showNotifications}
         >
           <Bell size={14} />
           {totalNotifications > 0 && (
@@ -3039,6 +3040,8 @@ function MasterActionHotbar({
               activeTool === tool.id ? "brightness-125 filter drop-shadow-[0_0_8px_rgba(249,115,22,0.7)]" : ""
             }`}
             title={tool.label}
+            aria-label={`Apri strumento ${tool.label}`}
+            aria-pressed={activeTool === tool.id}
           >
             {tool.icon}
             <span className="hidden md:inline text-[11px] font-serif uppercase tracking-wider">{tool.label}</span>
@@ -3060,6 +3063,8 @@ function MasterActionHotbar({
           isSoundbarOpen ? "brightness-125 filter drop-shadow-[0_0_8px_rgba(249,115,22,0.7)]" : ""
         }`}
         title="Apri Soundbar"
+        aria-label="Apri soundbar rumori"
+        aria-expanded={isSoundbarOpen}
       >
         <Volume2 size={14} />
         <span className="hidden md:inline text-[11px] font-serif uppercase tracking-wider">Soundbar</span>
@@ -3112,6 +3117,8 @@ function MasterActionHotbar({
           immersiveMode ? "bg-brass/15 text-brass" : "text-slate-400 hover:bg-white/5 hover:text-white"
         }`}
         title={immersiveMode ? "Mostra Interfaccia Regia" : "Modalità Immersiva Master"}
+        aria-label={immersiveMode ? "Mostra interfaccia regia" : "Attiva modalità immersiva Master"}
+        aria-pressed={immersiveMode}
       >
         {immersiveMode ? <EyeOff size={14} /> : <Eye size={14} />}
       </button>

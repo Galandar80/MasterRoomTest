@@ -26,6 +26,7 @@ import type {
   Scene,
   SoundEffect
 } from "@/lib/types";
+import { isConfiguredSuperadmin } from "@/lib/superadmin";
 
 type DatabaseClient = SupabaseClient;
 const ROOM_MESSAGE_PAGE_SIZE = 150;
@@ -59,6 +60,11 @@ type RoomMessagePage = {
   privateMessages: Message[];
   offMessages: Message[];
   hasOlderMessages: boolean;
+};
+
+type InviteRoomLookup = Room & {
+  campaign_master_id: string;
+  player_count: number;
 };
 
 export async function ensureProfile(supabase: DatabaseClient, user: User): Promise<Profile> {
@@ -310,7 +316,7 @@ export async function deleteMediaBySuperAdmin(supabase: DatabaseClient, profile:
 }
 
 export function isSuperAdmin(profile: Profile) {
-  return profile.email.toLowerCase() === "galandar@gmail.com";
+  return isConfiguredSuperadmin(profile);
 }
 
 export async function createGameInSupabase(
@@ -436,46 +442,42 @@ export async function createGameInSupabase(
 
 export async function enterMasterRoomByCode(supabase: DatabaseClient, code: string, profile: Profile) {
   const { data: room, error } = await supabase
-    .from("rooms")
-    .select("*, campaigns!inner(master_id)")
-    .eq("invite_code", code.trim().toUpperCase())
+    .rpc("lookup_room_by_invite_code", { lookup_code: code.trim().toUpperCase() })
     .maybeSingle();
 
   if (error) throw error;
   if (!room) return null;
-  if (room.campaigns?.master_id !== profile.id) {
+  const lookup = room as InviteRoomLookup;
+  if (lookup.campaign_master_id !== profile.id) {
     throw new Error("Questo codice esiste, ma la stanza appartiene a un altro Master.");
   }
 
-  return loadRoomState(supabase, room.id, { ...profile, role: "master" });
+  return loadRoomState(supabase, lookup.id, { ...profile, role: "master" });
 }
 
 export async function joinRoomByCode(supabase: DatabaseClient, code: string, profile: Profile) {
-  const { data: room, error } = await supabase.from("rooms").select("*").eq("invite_code", code.trim().toUpperCase()).maybeSingle();
+  const { data: room, error } = await supabase
+    .rpc("lookup_room_by_invite_code", { lookup_code: code.trim().toUpperCase() })
+    .maybeSingle();
 
   if (error) throw error;
   if (!room) return null;
+  const lookup = room as InviteRoomLookup;
 
   const { data: existingCharacter } = await supabase
     .from("player_characters")
     .select("*")
-    .eq("room_id", room.id)
+    .eq("room_id", lookup.id)
     .eq("user_id", profile.id)
     .maybeSingle();
 
   if (!existingCharacter) {
-    const { count, error: countError } = await supabase
-      .from("player_characters")
-      .select("id", { count: "exact", head: true })
-      .eq("room_id", room.id);
-
-    if (countError) throw countError;
-    if ((count ?? 0) >= (room.max_players ?? 4)) {
+    if ((lookup.player_count ?? 0) >= (lookup.max_players ?? 4)) {
       throw new Error("La stanza ha raggiunto il numero massimo di giocatori disponibili.");
     }
 
     await supabase.from("player_characters").insert({
-      room_id: room.id,
+      room_id: lookup.id,
       user_id: profile.id,
       character_name: profile.username || "Nuovo",
       character_surname: "Viandante",
@@ -489,7 +491,7 @@ export async function joinRoomByCode(supabase: DatabaseClient, code: string, pro
     });
   }
 
-  return loadRoomState(supabase, room.id, profile);
+  return loadRoomState(supabase, lookup.id, profile);
 }
 
 export async function createOrUpdateCharacter(
@@ -814,10 +816,7 @@ export async function updateScene(
       .update({ linked_audio_id: values.linkedAudioId || null })
       .eq("id", sceneId);
 
-    if (audioLinkError && audioLinkError.code !== "PGRST204") {
-      // Re-throw only if it's not a schema cache miss (we'll live without audio linking until cache refreshes)
-      console.warn("[updateScene] linked_audio_id update failed:", audioLinkError.message);
-    } else if (!audioLinkError) {
+    if (!audioLinkError) {
       // Patch the returned scene object with the audio link so state is consistent
       (updatedScene as Record<string, unknown>).linked_audio_id = values.linkedAudioId || null;
     }
