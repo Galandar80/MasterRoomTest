@@ -4,11 +4,15 @@ type ClaimsSource = {
   app_metadata?: Record<string, unknown> | null;
 };
 
+const BOOTSTRAP_SUPERADMIN_EMAILS = ["galandar@gmail.com"];
+
 export function configuredSuperadminEmails() {
-  return (process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? "")
+  const envEmails = (process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? "")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
+
+  return Array.from(new Set([...envEmails, ...BOOTSTRAP_SUPERADMIN_EMAILS]));
 }
 
 export function hasSuperadminClaim(source?: ClaimsSource | null) {
