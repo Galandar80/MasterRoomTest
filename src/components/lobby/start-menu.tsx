@@ -26,6 +26,9 @@ type StartMenuProps = {
   onSignOut?: () => void;
   isSuperAdmin?: boolean;
   onSuperAdmin?: () => void;
+  currentSession?: ActiveSessionSummary;
+  onResumeMaster?: () => void;
+  onResumePlayer?: () => void;
 };
 
 export function StartMenu({
@@ -33,7 +36,10 @@ export function StartMenu({
   onJoin,
   onSignOut,
   isSuperAdmin = false,
-  onSuperAdmin
+  onSuperAdmin,
+  currentSession,
+  onResumeMaster,
+  onResumePlayer
 }: StartMenuProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -305,7 +311,11 @@ export function StartMenu({
               </p>
             </div>
 
-            <div className="mt-8 grid gap-4">
+            {currentSession ? (
+              <ActiveSessionPanel session={currentSession} onResumeMaster={onResumeMaster} onResumePlayer={onResumePlayer} />
+            ) : null}
+
+            <div className={`${currentSession ? "mt-5" : "mt-8"} grid gap-4`}>
               <button
                 type="button"
                 onMouseEnter={playUiHover}
@@ -387,6 +397,15 @@ export function StartMenu({
   );
 }
 
+type ActiveSessionSummary = {
+  campaignTitle: string;
+  roomName: string;
+  inviteCode: string;
+  sceneTitle: string;
+  role: "master" | "player";
+  playerCount: number;
+};
+
 function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
   return (
     <div className="flex items-start gap-4 px-7 py-5">
@@ -396,6 +415,93 @@ function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: 
         <span className="mt-2 block text-sm leading-5 text-stone-300/72">{text}</span>
       </span>
     </div>
+  );
+}
+
+function ActiveSessionPanel({
+  session,
+  onResumeMaster,
+  onResumePlayer
+}: {
+  session: ActiveSessionSummary;
+  onResumeMaster?: () => void;
+  onResumePlayer?: () => void;
+}) {
+  const canResumeMaster = session.role === "master" && onResumeMaster;
+
+  return (
+    <section
+      className="mt-6 rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4 text-left shadow-[0_0_34px_rgba(16,185,129,0.1)]"
+      aria-label="Sessione attiva"
+    >
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-emerald-300/30 bg-black/30 text-emerald-200">
+          <Sparkles size={20} />
+        </span>
+        <div className="min-w-0">
+          <p className="font-serif text-xs uppercase tracking-[0.22em] text-emerald-200/90">Sessione attiva</p>
+          <h3 className="mt-1 truncate font-serif text-lg uppercase tracking-[0.12em] text-stone-100">{session.campaignTitle}</h3>
+          <div className="mt-2 grid gap-1 text-xs leading-5 text-stone-300/78">
+            <span className="truncate">Stanza: {session.roomName}</span>
+            <span className="truncate">Scena: {session.sceneTitle}</span>
+            <span>
+              Codice {session.inviteCode} · {session.playerCount} {session.playerCount === 1 ? "personaggio" : "personaggi"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className={`mt-4 grid gap-2 ${canResumeMaster && onResumePlayer ? "sm:grid-cols-2" : ""}`}>
+        {canResumeMaster ? (
+          <ResumeButton
+            icon={<Crown size={20} />}
+            title="Rientra in regia"
+            text="Gestisci scene, audio e giocatori"
+            onClick={onResumeMaster}
+          />
+        ) : null}
+        {onResumePlayer ? (
+          <ResumeButton
+            icon={<DoorOpen size={20} />}
+            title={session.role === "master" ? "Vista giocatore" : "Rientra nella stanza"}
+            text={session.role === "master" ? "Controlla cosa vede il tavolo" : "Riprendi la sessione"}
+            onClick={onResumePlayer}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ResumeButton({
+  icon,
+  title,
+  text,
+  onClick
+}: {
+  icon: ReactNode;
+  title: string;
+  text: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onMouseEnter={playUiHover}
+      onClick={() => {
+        playUiClick();
+        onClick();
+      }}
+      className="rounded-lg border border-brass/25 bg-black/32 px-3 py-3 text-left transition duration-200 hover:border-brass/55 hover:bg-brass/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass"
+    >
+      <span className="flex items-start gap-2">
+        <span className="mt-0.5 text-brass">{icon}</span>
+        <span className="min-w-0">
+          <span className="block font-serif text-sm uppercase tracking-[0.13em] text-stone-100">{title}</span>
+          <span className="mt-1 block text-xs leading-5 text-stone-300/72">{text}</span>
+        </span>
+      </span>
+    </button>
   );
 }
 

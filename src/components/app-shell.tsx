@@ -2285,6 +2285,20 @@ export function AppShell() {
           onSignOut={signOut}
           isSuperAdmin={isSuperAdmin}
           onSuperAdmin={openSuperAdminPanel}
+          currentSession={
+            hasCurrentSession
+              ? {
+                  campaignTitle: roomState.campaigns[0]?.title ?? "Campagna",
+                  roomName: roomState.room.name,
+                  inviteCode: roomState.room.invite_code,
+                  sceneTitle: roomState.scene.title,
+                  role: isCurrentMaster ? "master" : "player",
+                  playerCount: roomState.characters.length
+                }
+              : undefined
+          }
+          onResumeMaster={isCurrentMaster && hasCurrentSession ? () => setView("master") : undefined}
+          onResumePlayer={hasCurrentSession ? () => setView("player") : undefined}
         />
       ) : null}
 
