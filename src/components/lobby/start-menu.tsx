@@ -26,6 +26,7 @@ type StartMenuProps = {
   onSignOut?: () => void;
   isSuperAdmin?: boolean;
   onSuperAdmin?: () => void;
+  onSessions?: () => void;
   currentSession?: ActiveSessionSummary;
   onResumeMaster?: () => void;
   onResumePlayer?: () => void;
@@ -37,6 +38,7 @@ export function StartMenu({
   onSignOut,
   isSuperAdmin = false,
   onSuperAdmin,
+  onSessions,
   currentSession,
   onResumeMaster,
   onResumePlayer
@@ -333,6 +335,26 @@ export function StartMenu({
                   <span className="mt-1 block text-sm text-stone-200/70">Nuova campagna / nuova stanza</span>
                 </span>
               </button>
+
+              {onSessions ? (
+                <button
+                  type="button"
+                  onMouseEnter={playUiHover}
+                  onClick={() => {
+                    playUiClick();
+                    onSessions();
+                  }}
+                  className="premium-action premium-action-violet"
+                >
+                  <span className="premium-action-icon">
+                    <BookOpen size={30} />
+                  </span>
+                  <span>
+                    <span className="block font-serif text-xl uppercase tracking-[0.14em] text-stone-100">Le tue sessioni</span>
+                    <span className="mt-1 block text-sm text-stone-200/70">Scegli tra regie e personaggi attivi</span>
+                  </span>
+                </button>
+              ) : null}
 
               <button
                 type="button"

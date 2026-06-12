@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, Loader2, LogOut, MessageSquareText, Sparkl
 import { CharacterSetupForm, type CharacterSetupValues } from "@/components/lobby/character-setup-form";
 import { CreateGameForm, type CreateGameValues } from "@/components/lobby/create-game-form";
 import { JoinRoomForm, type JoinMode } from "@/components/lobby/join-room-form";
+import { SessionSwitcher } from "@/components/lobby/session-switcher";
 import { StartMenu } from "@/components/lobby/start-menu";
 import { demoRoomState } from "@/lib/demo-data";
 import { cardDeckLabel, drawCard, encodeDiceReason, getDiceCount, rollDice as rollDiceValues, stripDiceCountMarker, type CardDeckType } from "@/lib/game-random";
@@ -41,6 +42,7 @@ import {
   joinRoomByCode,
   listAllRoomsForSuperAdmin,
   listAllMediaForSuperAdmin,
+  listUserSessions,
   exportRoomMessages,
   duplicateNarrativeMap,
   loadInitialRoomState,
@@ -70,7 +72,7 @@ import {
   updateMapFogArea,
   deleteMapFogArea
 } from "@/lib/supabase/room-service";
-import type { AdminMediaOverview, AdminRoomOverview } from "@/lib/supabase/room-service";
+import type { AdminMediaOverview, AdminRoomOverview, UserSessionSummary } from "@/lib/supabase/room-service";
 import type { AudioTrack, DiceRequest, InventoryItem, MapCharacterPosition, MapFogArea, MediaAsset, Message, NarrativeMap, Npc, Room, RoomState, Scene, SceneMediaType, SceneVisibility, SoundEffect } from "@/lib/types";
 
 const MasterControlRoom = dynamic(
@@ -86,7 +88,7 @@ const SuperAdminRooms = dynamic(
   { loading: () => <AppLoading status="Caricamento pannello superadmin..." /> }
 );
 
-type View = "menu" | "create" | "join" | "character" | "player" | "master" | "superadmin";
+type View = "menu" | "create" | "join" | "sessions" | "character" | "player" | "master" | "superadmin";
 type CinematicEvent =
   | { id: string; kind: "scene"; title: string; detail: string; imageUrl?: string; mediaType?: SceneMediaType }
   | { id: string; kind: "npc"; title: string; detail: string; imageUrl?: string }
@@ -131,6 +133,8 @@ export function AppShell() {
   const [actionLog, setActionLog] = useState<{ id: string; label: string; detail?: string; created_at: string }[]>([]);
   const [adminRooms, setAdminRooms] = useState<AdminRoomOverview[]>([]);
   const [adminMedia, setAdminMedia] = useState<AdminMediaOverview[]>([]);
+  const [userSessions, setUserSessions] = useState<UserSessionSummary[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [cinematicEvent, setCinematicEvent] = useState<CinematicEvent | null>(null);
   const sceneEventRef = useRef(roomState.scene.id);
   const spotlightEventRef = useRef(roomState.room.spotlight_npc_id ?? "");
@@ -671,6 +675,89 @@ export function AppShell() {
       setAdminMedia(media);
     } catch (adminError) {
       setError(readError(adminError));
+    }
+  }
+
+  function currentSessionSummary(): UserSessionSummary | null {
+    if (!hasCurrentSession) return null;
+
+    return {
+      id: `${isCurrentMaster ? "master" : "player"}:${roomState.room.id}`,
+      roomId: roomState.room.id,
+      campaignId: roomState.room.campaign_id,
+      campaignTitle: roomState.campaigns[0]?.title ?? "Campagna",
+      campaignStatus: roomState.campaigns[0]?.status,
+      roomName: roomState.room.name,
+      inviteCode: roomState.room.invite_code,
+      role: isCurrentMaster ? "master" : "player",
+      playerCount: roomState.characters.length,
+      maxPlayers: roomState.room.max_players ?? 4,
+      characterName: currentCharacter
+        ? `${currentCharacter.character_name} ${currentCharacter.character_surname}`.trim()
+        : undefined,
+      isSetupComplete: currentCharacter?.is_setup_complete,
+      createdAt: roomState.campaigns[0]?.created_at ?? new Date().toISOString(),
+      lastActivityAt: roomState.messages.at(-1)?.created_at ?? roomState.scene.created_at ?? new Date().toISOString()
+    };
+  }
+
+  async function refreshUserSessions() {
+    if (!supabase || demoMode) {
+      const current = currentSessionSummary();
+      setUserSessions(current ? [current] : []);
+      return;
+    }
+
+    try {
+      setError("");
+      setIsLoadingSessions(true);
+      const sessions = await listUserSessions(supabase, roomState.profile);
+      setUserSessions(sessions);
+    } catch (sessionsError) {
+      setError(readError(sessionsError));
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }
+
+  async function openSessionsPanel() {
+    setView("sessions");
+    await refreshUserSessions();
+  }
+
+  async function openUserSession(session: UserSessionSummary) {
+    if (!supabase || demoMode) {
+      setRoomState((state) => ({ ...state, profile: { ...state.profile, role: session.role } }));
+      setView(session.role === "master" ? "master" : "player");
+      return;
+    }
+
+    try {
+      setError("");
+      const selectedState = await loadRoomState(supabase, session.roomId, { ...roomState.profile, role: session.role });
+
+      if (session.role === "master") {
+        setRoomState({ ...selectedState, profile: { ...selectedState.profile, role: "master" } });
+        setStatus("Sessione Master aperta");
+        setView("master");
+        return;
+      }
+
+      const playerState = { ...selectedState, profile: { ...selectedState.profile, role: "player" as const } };
+      const existingCharacter = playerState.characters.find((character) => character.user_id === playerState.profile.id);
+      setRoomState(playerState);
+
+      if (existingCharacter?.is_setup_complete) {
+        setPendingPlayerRoom(null);
+        setStatus("Sessione giocatore aperta");
+        setView("player");
+      } else {
+        setPendingPlayerRoom(playerState);
+        setStatus("Completa il personaggio per questa sessione");
+        setView("character");
+      }
+    } catch (sessionsError) {
+      setError(readError(sessionsError));
     }
   }
 
@@ -2285,6 +2372,7 @@ export function AppShell() {
           onSignOut={signOut}
           isSuperAdmin={isSuperAdmin}
           onSuperAdmin={openSuperAdminPanel}
+          onSessions={openSessionsPanel}
           currentSession={
             hasCurrentSession
               ? {
@@ -2299,6 +2387,16 @@ export function AppShell() {
           }
           onResumeMaster={isCurrentMaster && hasCurrentSession ? () => setView("master") : undefined}
           onResumePlayer={hasCurrentSession ? () => setView("player") : undefined}
+        />
+      ) : null}
+
+      {view === "sessions" ? (
+        <SessionSwitcher
+          sessions={userSessions}
+          isLoading={isLoadingSessions}
+          onBack={() => setView("menu")}
+          onRefresh={refreshUserSessions}
+          onOpenSession={openUserSession}
         />
       ) : null}
 

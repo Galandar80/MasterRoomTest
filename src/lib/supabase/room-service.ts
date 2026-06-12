@@ -55,6 +55,24 @@ export type AdminMediaOverview = {
   created_at?: string;
 };
 
+export type UserSessionSummary = {
+  id: string;
+  roomId: string;
+  campaignId: string;
+  campaignTitle: string;
+  campaignStatus?: Campaign["status"];
+  roomName: string;
+  inviteCode: string;
+  role: "master" | "player";
+  playerCount: number;
+  maxPlayers: number;
+  characterId?: string;
+  characterName?: string;
+  isSetupComplete?: boolean;
+  createdAt: string;
+  lastActivityAt: string;
+};
+
 type RoomMessagePage = {
   messages: Message[];
   privateMessages: Message[];
@@ -140,6 +158,72 @@ export async function loadInitialRoomState(supabase: DatabaseClient, profile: Pr
   }
 
   return null;
+}
+
+export async function listUserSessions(supabase: DatabaseClient, profile: Profile): Promise<UserSessionSummary[]> {
+  const [{ data: campaigns, error: campaignError }, { data: characters, error: characterError }] = await Promise.all([
+    supabase
+      .from("campaigns")
+      .select("id,title,status,created_at,rooms(id,name,invite_code,max_players,created_at,player_characters(id))")
+      .eq("master_id", profile.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("player_characters")
+      .select("id,room_id,character_name,character_surname,is_setup_complete,created_at,rooms(id,name,invite_code,max_players,created_at,campaigns(id,title,status),player_characters(id))")
+      .eq("user_id", profile.id)
+      .order("created_at", { ascending: false })
+  ]);
+
+  if (campaignError) throw campaignError;
+  if (characterError) throw characterError;
+
+  const masterSessions = ((campaigns ?? []) as any[]).flatMap((campaign) =>
+    ((campaign.rooms ?? []) as any[]).map((room) => ({
+      id: `master:${room.id}`,
+      roomId: room.id,
+      campaignId: campaign.id,
+      campaignTitle: campaign.title,
+      campaignStatus: campaign.status,
+      roomName: room.name,
+      inviteCode: room.invite_code,
+      role: "master" as const,
+      playerCount: Array.isArray(room.player_characters) ? room.player_characters.length : 0,
+      maxPlayers: room.max_players ?? 4,
+      createdAt: room.created_at ?? campaign.created_at,
+      lastActivityAt: room.created_at ?? campaign.created_at
+    }))
+  );
+
+  const playerSessions = ((characters ?? []) as any[])
+    .filter((character) => character.rooms)
+    .map((character) => {
+      const room = character.rooms;
+      const campaign = room.campaigns;
+      const characterName = `${character.character_name ?? "Eroe"} ${character.character_surname ?? ""}`.trim();
+
+      return {
+        id: `player:${room.id}:${character.id}`,
+        roomId: room.id,
+        campaignId: campaign?.id ?? room.campaign_id,
+        campaignTitle: campaign?.title ?? "Campagna",
+        campaignStatus: campaign?.status,
+        roomName: room.name,
+        inviteCode: room.invite_code,
+        role: "player" as const,
+        playerCount: Array.isArray(room.player_characters) ? room.player_characters.length : 0,
+        maxPlayers: room.max_players ?? 4,
+        characterId: character.id,
+        characterName,
+        isSetupComplete: character.is_setup_complete ?? false,
+        createdAt: character.created_at ?? room.created_at,
+        lastActivityAt: character.created_at ?? room.created_at
+      };
+    });
+
+  const unique = new Map<string, UserSessionSummary>();
+  [...masterSessions, ...playerSessions].forEach((session) => unique.set(session.id, session));
+
+  return Array.from(unique.values()).sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
 }
 
 export async function listAllRoomsForSuperAdmin(supabase: DatabaseClient, profile: Profile): Promise<AdminRoomOverview[]> {
