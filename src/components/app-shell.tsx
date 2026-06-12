@@ -2316,7 +2316,13 @@ export function AppShell() {
 
       {view === "create" ? <CreateGameForm state={roomState} onBack={() => setView("menu")} onCreate={createGame} /> : null}
 
-      {view === "join" ? <JoinRoomForm room={roomState.room} onBack={() => setView("menu")} onJoin={joinRoom} /> : null}
+      {view === "join" ? (
+        <JoinRoomForm
+          suggestedInviteCode={hasCurrentSession ? roomState.room.invite_code : undefined}
+          onBack={() => setView("menu")}
+          onJoin={joinRoom}
+        />
+      ) : null}
 
       {view === "character" ? (
         <CharacterSetupForm defaultName={roomState.profile.username} onBack={() => setView("join")} onCreate={createCharacter} />
